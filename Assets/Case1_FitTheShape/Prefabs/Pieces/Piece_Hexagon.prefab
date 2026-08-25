@@ -1,0 +1,97 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &7229772308919549451
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 570851682050951636, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5545981397468321620, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_Name
+      value: Piece_Hexagon
+      objectReference: {fileID: 0}
+    - target: {fileID: 8472672947824544524, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 7e44c296e5d564e748a96a432d835104, type: 2}
+    - target: {fileID: 9005161584791411227, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -2.536
+      objectReference: {fileID: 0}
+    - target: {fileID: 9005161584791411227, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -3.2199998
+      objectReference: {fileID: 0}
+    - target: {fileID: 9005161584791411227, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -9.1280155
+      objectReference: {fileID: 0}
+    - target: {fileID: 9005161584791411227, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 9005161584791411227, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0.000000007614331
+      objectReference: {fileID: 0}
+    - target: {fileID: 9005161584791411227, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0.00008726013
+      objectReference: {fileID: 0}
+    - target: {fileID: 9005161584791411227, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0.00008726013
+      objectReference: {fileID: 0}
+    - target: {fileID: 9005161584791411227, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9005161584791411227, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: -0.010009766
+      objectReference: {fileID: 0}
+    - target: {fileID: 9005161584791411227, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: -0.010009766
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects:
+    - {fileID: 2218590610468068495, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5545981397468321620, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 431585212908391840}
+  m_SourcePrefab: {fileID: 100100000, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+--- !u!1 &2927910603489864031 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5545981397468321620, guid: aa2cb8ebce4b12f4fb6044e6b54b80b7, type: 3}
+  m_PrefabInstance: {fileID: 7229772308919549451}
+  m_PrefabAsset: {fileID: 0}
+--- !u!65 &431585212908391840
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2927910603489864031}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.8467041, y: 0.36110255, z: 0.9298468}
+  m_Center: {x: -0.000031577434, y: 0.18040347, z: -0.005999565}

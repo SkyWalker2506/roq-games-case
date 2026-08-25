@@ -1,0 +1,62 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Case1_Toon_244_147_183
+  m_Shader: {fileID: 4800000, guid: 88f30203690ba470d99ca82d64798670, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _BevelDarken: 0.2
+    - _BottomDarken: 0.35
+    - _BottomDarkenPower: 1.35
+    - _CavityBevelRelief: 0.85
+    - _CavityBevelTint: 0
+    - _CavityBounce: 1
+    - _CavityCrease: 0
+    - _CavityFloorExtra: 0
+    - _CavityLightKill: 1
+    - _Cull: 2
+    - _CurveDarken: 0
+    - _EdgeInk: 0.25
+    - _EdgeInkWidth: 3
+    - _IndentBevel: 0.035
+    - _IndentDepth: 0.18
+    - _IndentFloorDarken: 0.364
+    - _IndentInnerShadow: 0.68
+    - _IndentScale: 1.28
+    - _IndentWall: 0
+    - _OffsetFactor: 0
+    - _OffsetUnits: 0
+    - _OutlineWidth: 0
+    - _RimLift: 0.02
+    - _ShadeStrength: 0.22
+    - _ShapeType: 0
+    - _Smoothness: 0.55
+    - _SpecularStrength: 0
+    - _VertShade: 0.2
+    - _VertShadeBias: 0
+    - _Wrap: 0.45
+    m_Colors:
+    - _BaseColor: {r: 0.96, g: 0.58, b: 0.72, a: 1}
+    - _OutlineColor: {r: 0.04, g: 0.03, b: 0.08, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

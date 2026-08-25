@@ -1,0 +1,260 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: MysterySlot_New
+  m_Shader: {fileID: 4800000, guid: 933532a4fcc9baf4fa0491de14d08ed7, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - _EMISSION
+  m_InvalidKeywords: []
+  m_LightmapFlags: 2
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap:
+    RenderType: Opaque
+  disabledShaderPasses:
+  - MOTIONVECTORS
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BaseTexture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Base_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailAlbedoMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailNormalMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _EmissionMap:
+        m_Texture: {fileID: 2800000, guid: 0a813cd1cf7c84044932f8a216e7c545, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Emission_Map:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MainTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MetallicGlossMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MetallicMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _NormalMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OcclusionMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ParallaxMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RimMap:
+        m_Texture: {fileID: 10300, guid: 0000000000000000f000000000000000, type: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RimMap2:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Rim_Map:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SampleTexture2D_7e2195b6a4324e2587d1c1f446a555c1_Texture_1_Texture2D:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SampleTexture2D_8cc15aa1bcf641eb983be82f221ca2a7_Texture_1_Texture2D:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SpecGlossMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Triplanar_cb865e49b1e143cabb16436239060eb6_Texture_1_Texture2D:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - unity_Lightmaps:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - unity_LightmapsInd:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - unity_ShadowMasks:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _Activate_Dissolve: 1
+    - _Activate_Effects: 0
+    - _Activate_FX_Rim_Emission: 0
+    - _Activate_Hit_Flash: 1
+    - _Activate_Vertical_Fog: 1
+    - _AddPrecomputedVelocity: 0
+    - _AlphaClip: 0
+    - _AlphaToMask: 0
+    - _Alpha_Clipping: 0.5
+    - _Blend: 0
+    - _BlendModePreserveSpecular: 1
+    - _BumpScale: 1
+    - _ClearCoatMask: 0
+    - _ClearCoatSmoothness: 0
+    - _Cull: 2
+    - _Cutoff: 0.5
+    - _DeformedMeshIndex: 0
+    - _DetailAlbedoMapScale: 1
+    - _DetailNormalMapScale: 1
+    - _Dissolve: 1
+    - _DissolveScale: 6
+    - _Dissolve_FX_Width: -0.05
+    - _Dissolve_Noise_Scale: 10
+    - _Dissolve_Scale: 10
+    - _DstBlend: 0
+    - _DstBlendAlpha: 0
+    - _Effects: 1
+    - _EmissionBlend: 0
+    - _EnvironmentReflections: 1
+    - _GlossMapScale: 0
+    - _Glossiness: 0
+    - _GlossyReflections: 0
+    - _HitFlash: 0
+    - _Hit_Flash: 0
+    - _IsAttaacked: 0
+    - _IsWindy: 0
+    - _Is_Attaacked: 0
+    - _Metallic: 0
+    - _NormalStrength: 0
+    - _OcclusionStrength: 1
+    - _Parallax: 0.005
+    - _QueueControl: 0
+    - _QueueOffset: 0
+    - _ReceiveShadows: 1
+    - _RimLightPower: 1.05
+    - _RimLightPower_1: 1
+    - _RimLightPower_2: 1
+    - _RimSmoothness: 0.6
+    - _RimThreshold: 0.55
+    - _Rim_Light_Power: 1
+    - _ShadowSmoothness: 0.23
+    - _ShadowThreshold: 0.12
+    - _Shadow_Smoothness: 0
+    - _Shadow_Threshold: 0
+    - _Smoothness: 0.15
+    - _SmoothnessTextureChannel: 0
+    - _Specular: 0.142
+    - _SpecularHighlights: 1
+    - _SpecularSmoothness: 0.63
+    - _SpecularThreshold: 1.03
+    - _Specular_Smoothness: 0
+    - _Specular_Threshold: 0
+    - _SrcBlend: 1
+    - _SrcBlendAlpha: 1
+    - _Surface: 0
+    - _Vertical_Fog_Smoothness: 0.53
+    - _Vertical_Fog_Threshold: -0.65
+    - _WindAngle_x: 0
+    - _Wind_Density: 0
+    - _Wind_Strength: 0
+    - _WorkflowMode: 1
+    - _XRMotionVectorsPass: 1
+    - _ZWrite: 1
+    - _alphaclip: 0.5
+    - _dissolve: 1
+    - _dissolveFX: -0.04
+    - _fade: -1.42
+    - _fade2: -1.18
+    - _fadeRotate: -0.83
+    - _fadeline: 0.1
+    m_Colors:
+    - _BaseColor: {r: 0.968627, g: 0.435294, b: 0.650980, a: 1}
+    - _Base_Color: {r: 0.968627, g: 0.435294, b: 0.650980, a: 1}
+    - _Color: {r: 0.968627, g: 0.435294, b: 0.650980, a: 1}
+    - _DeformationParamsForMotionVectors: {r: 0, g: 0, b: 0, a: 0}
+    - _DissolveColor: {r: 3.2285614, g: 2.2582104, b: 0.5939335, a: 1}
+    - _Dissolve_FX_Color: {r: 0.968627, g: 0.435294, b: 0.650980, a: 1}
+    - _EmissionColor: {r: 0.32002485, g: 0.16834283, b: 0.3679245, a: 1}
+    - _Emission_Color: {r: 0.968627, g: 0.435294, b: 0.650980, a: 1}
+    - _Emission_Offset: {r: 0, g: 0, b: 0, a: 0}
+    - _Emission_Speed: {r: 1, g: 1, b: 0, a: 0}
+    - _Emission_Tiling: {r: 3, g: 3, b: 0, a: 0}
+    - _Hit_Flash_Color: {r: 0.968627, g: 0.435294, b: 0.650980, a: 1}
+    - _NormalOffset: {r: 0, g: 0, b: 0, a: 0}
+    - _NormalTiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Offset: {r: 0, g: 0, b: 0, a: 0}
+    - _RimColor: {r: 6.0628667, g: 1.4585197, b: 4.5434327, a: 1}
+    - _RimOffset: {r: 1, g: 1, b: 0, a: 0}
+    - _RimSpeed: {r: 0.3, g: 0.3, b: 0, a: 0}
+    - _RimTiling: {r: 0.75, g: 0.75, b: 0, a: 0}
+    - _RimTiling2: {r: 1, g: 1, b: 0, a: 0}
+    - _Rim_Color: {r: 0.968627, g: 0.435294, b: 0.650980, a: 1}
+    - _Rim_Offset: {r: 1, g: 1, b: 0, a: 0}
+    - _Rim_Speed: {r: 1, g: 1, b: 0, a: 0}
+    - _Rim_Speed_XY: {r: 1, g: 1, b: 0, a: 0}
+    - _Rim_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _ShadowColor: {r: 0.35035196, g: 0.13011748, b: 0.6415094, a: 1}
+    - _Shadow_Color: {r: 0.968627, g: 0.435294, b: 0.650980, a: 1}
+    - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
+    - _SpecularColor: {r: 1, g: 0, b: 0.9275651, a: 1}
+    - _Specular_Color: {r: 0.968627, g: 0.435294, b: 0.650980, a: 1}
+    - _Tiling: {r: 10, g: 10, b: 0, a: 0}
+    - _Vertica_Fog_Color: {r: 0.968627, g: 0.435294, b: 0.650980, a: 1}
+    - _Wind_Speed: {r: 0, g: 0, b: 0, a: 0}
+    - _fadecolor: {r: 1, g: 1, b: 1, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
+--- !u!114 &3055782037929099650
+MonoBehaviour:
+  m_ObjectHideFlags: 11
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0353a89b1f911e48b9e16bdc9f2e058, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Editor::UnityEditor.Rendering.Universal.AssetVersion
+  version: 10
