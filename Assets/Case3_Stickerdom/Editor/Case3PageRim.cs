@@ -93,6 +93,9 @@ namespace Case3.EditorTools
         {
             ApplyToStickerdom();
             Case3PageEntries.Build();
+            // Both halves are synchronous, so nothing is left to drive: exit rather than sit in
+            // batchmode holding tools/unity-run.sh's lock against the next run.
+            if (UnityEngine.Application.isBatchMode) EditorApplication.Exit(0);
         }
 
         /// <summary>Idempotent. Safe to run on an already-rimmed scene; it rewrites, never stacks.</summary>

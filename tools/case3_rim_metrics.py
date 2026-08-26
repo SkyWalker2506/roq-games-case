@@ -209,6 +209,15 @@ REF_ROIS = {
     "ref spaghetti plate": ((300, 1030, 660, 1250), (243, 219, 178)),
     "ref candy cane":      ((150, 1280, 500, 1470), (240, 216, 176)),
 }
+# REGISTRATION. These are pixel windows, so they only mean anything on a frame where the
+# stickers are where they were when the windows were drawn: an EDIT-MODE capture of the idle
+# board (.plan-build/cli/c3_rim_before_game.png and c3_rim_after_game.png). Case3Director
+# re-lays the strip at Start, so on a play-mode frame from FrameStripCapture two of these
+# windows no longer sit on the sticker they were registered to - the ginger cat's ray count
+# falls from 1622 to 333 - and the gate reads red for a reason that has nothing to do with the
+# rim. The two windows that still land (croissant, navy ramen) read the same on both frames,
+# 8.25/8.00 px at IQR 0.75/1.25, which is what says the difference is registration and not
+# geometry. Re-register before gating a play-mode frame.
 OUR_ROIS = {
     "our ginger cat":      ((660, 800, 900, 1130), (238, 224, 192)),
     "our navy ramen":      ((250, 1330, 560, 1580), (238, 224, 192)),

@@ -382,10 +382,12 @@ public static class Case3PageEntries
 
         tmp.font = Shared.Sequencing.UIStyle.FontAsset;
         tmp.text = "0/5";
-        // TMP's fontSize is in the same units the rect is, times ten; the cap height of this
-        // face is 0.72 em, so a 43 px glyph on a 100 px/unit sprite wants
-        //   43 / 100 / 0.72 * 10 = 5.97. MEASURED back off a game-view capture, not assumed.
-        tmp.fontSize = 5.97f;
+        // MEASURED off captured frames, twice, and the first reading was wrong in a way worth
+        // recording: the ink mask for the glyphs also caught the cat's brown tail behind them,
+        // so "1/5" measured 53 render px when the digits were 42.5. Isolating the rightmost
+        // digit clear of the art gives 39 px at fontSize 5.48, against a panel 262 * 1.05 =
+        // 275 render px tall, so 14.2% where the reference is 16.4%. 5.48 * 45.1/39 = 6.34.
+        tmp.fontSize = 6.34f;
         tmp.enableAutoSizing = false;
         tmp.fontStyle = FontStyles.Bold;
         tmp.color = CounterInk;
