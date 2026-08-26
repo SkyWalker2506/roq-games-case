@@ -198,7 +198,46 @@ namespace Case2
                 ? Instantiate(source, blockTransform.position, blockTransform.rotation)
                 : BuildProceduralFragments(blockTransform, art, shapeId);
             _root.name = "Case2_Shards";
-            _root.hideFlags = HideFlags.DontSave;
+
+            // MEASURED, in the owner's own open Editor with the game NOT running: 7 orphan
+            // `Case2_Shards` roots holding 1,438 shard objects, every one of them reporting
+            // `scene = <NO SCENE>`.
+            //
+            // `<NO SCENE>` is the signature of an object that outlived the teardown of the scene
+            // it was born in: the Scene view still draws it, because rendering does not ask which
+            // scene an object belongs to, while the Hierarchy cannot list it, because it
+            // enumerates the roots of LOADED scenes and this object belongs to none. That is
+            // exactly the pair of symptoms reported - shards on screen with the game closed, and
+            // nothing in the Hierarchy to select or delete.
+            //
+            // WHAT IS MEASURED AND WHAT IS NOT, kept apart on purpose:
+            //
+            //   MEASURED - the leak itself: 7 roots / 1,438 objects / all `<NO SCENE>`.
+            //   MEASURED - `HideFlags.DontSave` does NOT carry NotEditable on this Unity
+            //     (6000.3.11f1); a control read the flag back and got NotEditable=False. So the
+            //     leak was never un-deletable in principle, only unreachable in practice.
+            //   MEASURED, and it REFUTED the first hypothesis: closing a real scene with
+            //     `CloseScene(removeScene: true)` destroys a DontSave root, a
+            //     DontSaveInEditor|DontSaveInBuild root and a parented DontSave child alike. An
+            //     edit-mode scene unload is therefore NOT the path these shards survived.
+            //   NOT MEASURED HERE - the remaining path, which is the PLAY-MODE EXIT teardown. It
+            //     could not be exercised because the owner was working in the Editor window at
+            //     the time. So the survival mechanism is narrowed to play-mode exit by
+            //     elimination, not demonstrated.
+            //
+            // The fix is therefore written so that it does not DEPEND on which teardown it was:
+            //
+            // 1. The flags keep "never serialized" and nothing else, so a shard that does somehow
+            //    outlive a run can still never be written into the owner's scene file.
+            // 2. The root is parented under the sink, a real scene object, so its lifetime is a
+            //    subtree relationship rather than a flag Unity is free to interpret. Control C
+            //    above confirms a parented child dies with the scene. `Case2_Sequence` sits at
+            //    the scene root with an identity transform, and SetParent(worldPositionStays:
+            //    true) preserves the world pose regardless, so no shard moves by a float.
+            // 3. OnDisable calls Clear (below), which covers the play-mode-exit teardown
+            //    explicitly instead of trusting it.
+            _root.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
+            _root.transform.SetParent(transform, true);
             if (source != null) _root.transform.localScale = blockTransform.lossyScale;
             _root.SetActive(true);   // the fracture asset ships disabled
 
@@ -687,10 +726,33 @@ namespace Case2
                 // Survivors are deliberately left on the board. This blanket deactivation is why
                 // our 2.40 frame held 27 px of bright purple against the reference's 509.
                 if (_shards[i].Survivor >= 0) continue;
-                if (_shards[i].Tr != null) _shards[i].Tr.gameObject.SetActive(false);
+                // Destroyed, not merely switched off. A swallowed shard has finished its job and
+                // has nothing left to show, so the effect gives its objects back instead of
+                // stockpiling several hundred deactivated transforms per drop for the rest of the
+                // run. Visually identical - a deactivated shard rendered nothing either.
+                if (_shards[i].Tr != null) Destroy(_shards[i].Tr.gameObject);
             }
             _fall = null;
         }
+
+        /// <summary>
+        /// The effect tears itself down when it stops running, which is what "calistiktan sonra
+        /// zaten silinmesi lazim" asks for. This fires on the way out of Play mode and on a scene
+        /// unload, so the shards are released by the component that created them rather than swept
+        /// up afterwards by an editor-side tidy that would only hide the leak.
+        /// </summary>
+        void OnDisable()
+        {
+            // DestroyImmediate is illegal from OnDisable, so the teardown path never reaches for
+            // it. In Play mode Destroy does the work; on an edit-mode unload the root is a child
+            // of this transform and Unity destroys it with the scene, which is the whole point of
+            // parenting it there.
+            _tearingDown = true;
+            Clear();
+            _tearingDown = false;
+        }
+
+        bool _tearingDown;
 
         /// <summary>Removes every shard and stops the fall; a replay starts from a clean board.</summary>
         public void Clear()
@@ -704,7 +766,8 @@ namespace Case2
             _sprayShards.Clear();
             if (_root != null)
             {
-                if (Application.isPlaying) Destroy(_root); else DestroyImmediate(_root);
+                if (Application.isPlaying) Destroy(_root);
+                else if (!_tearingDown) DestroyImmediate(_root);
                 _root = null;
             }
         }
