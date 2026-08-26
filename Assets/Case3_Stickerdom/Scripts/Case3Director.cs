@@ -398,6 +398,24 @@ namespace Case3
             return null;
         }
 
+        /// <summary>
+        /// Sorting order a sticker is lifted to while it flies, and the floor the collected pile sits on.
+        ///
+        /// Derived from the cards rather than authored: `flightSortingOrder` was 590 while the reward
+        /// cards sit at 600/601/602, so every sticker flew UNDERNEATH the album on its way there and
+        /// only appeared once it had already landed. A serialized constant cannot notice that the cards
+        /// moved; reading them can. The authored value is still honoured as a floor.
+        /// </summary>
+        int CarrySortingOrder()
+        {
+            int top = flightSortingOrder;
+            if (stacks != null)
+                for (int i = 0; i < stacks.Length; i++)
+                    if (stacks[i] != null && stacks[i].card != null && stacks[i].card.sortingOrder + 10 > top)
+                        top = stacks[i].card.sortingOrder + 10;
+            return top;
+        }
+
         /// <summary>How many of a kind have been collected onto its card so far.</summary>
         public int StackCount(string key)
         {
@@ -774,7 +792,7 @@ namespace Case3
             CaptureHome();
             // Lift the whole piece of paper over the cards BEFORE Prepare, because the curl mesh
             // takes its own sorting order from the sprite's at that moment.
-            cur.sticker.sortingOrder = Mathf.Max(cur.HomeSortingOrder, flightSortingOrder);
+            cur.sticker.sortingOrder = Mathf.Max(cur.HomeSortingOrder, CarrySortingOrder());
             peel.Prepare();
 
             Debug.Log(string.Format("[Case3] RUN_BEGIN item={0} ({1}) -> card={2} slot={3}",
@@ -803,7 +821,12 @@ namespace Case3
             peel.SetProgress(0f);
             peel.SetAlpha(1f);
             flight.ResetTrail(SequenceClock);
-            SetRewardAlpha(cur, 0f);
+            // Clearing the card here is right for the FIRST of a kind and wrong for every one after it:
+            // the card is ONE renderer shared by the whole kind, so zeroing it wiped the cat that was
+            // already collected. Frame-by-frame, the filled card - art, name tab and counter together -
+            // vanished for ~0.65 s between the first and second cat and came back with the new art.
+            // The reference never blanks a card it has already filled.
+            if (StackCount(cur.key) == 0) SetRewardAlpha(cur, 0f);
 
             // ---------------------------------------------------------- 0. idle on page (0.00 to 0.75s)
             if (tIdle > 0.001f)
@@ -965,7 +988,7 @@ namespace Case3
                 else
                 {
                     if (cur.peel != null) cur.peel.SetCompanionsEnabled(false);
-                    cur.sticker.sortingOrder = cur.reward.sortingOrder + StackCount(cur.key);
+                    cur.sticker.sortingOrder = CarrySortingOrder() + StackCount(cur.key);
                     FanOntoStack(cur.sticker.transform, cur.reward, StackCount(cur.key) - 1);
                 }
             }
