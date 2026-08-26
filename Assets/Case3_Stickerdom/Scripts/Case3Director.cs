@@ -1169,9 +1169,15 @@ namespace Case3
 
             bool secondPeelLayer = false;
 
-            // Where the PAPER is before it curls. At progress 0 the mesh offset is zero, so this is
-            // the sheet's own visual home - and pinning to it is what makes the peel happen IN PLACE.
+            // The edge that stays stuck for the whole peel, taken while the sheet is still flat.
+            //
+            // The CENTRE is the wrong thing to hold here, and holding it is what the owner has been
+            // describing all along: "olacagi yerde ters donuyor gibi", "kendi etrafinda rotasyon
+            // gibi". As a sheet rolls up its drawn centre naturally travels toward the stuck edge, so
+            // forbidding the centre to move leaves rotation as the only thing left for it to do.
+            // Hold the edge and the middle is free to come with the roll, which is what paper does.
             Vector3 drawnHome = peel.VisualWorldCentre(9);
+            Vector3 peelEdgeHome = peel.AnchoredEdgeWorld();
 
             while (SequenceClock < _t0 + tPeel)
             {
@@ -1182,15 +1188,17 @@ namespace Case3
                 float e = Ease.Evaluate(EaseType.OutCubic, k);
 
                 peel.SetProgress(e * peelEnd);
-                // Pin the DRAWN sheet, not the transform.
+                // Pin the stuck EDGE, not the transform and not the centre.
                 //
-                // Writing the transform leaves the paper free to slide: StickerPeel's centroid
-                // compensation moves the drawn mesh away from its own transform as the curl grows,
-                // by as much as 3.23 world units on the cat. So the transform sat still and the paper
-                // wandered off - the owner: "oldugu yerde boyle sokulmuyor, random bir yere giderek
-                // aciliyor". Pinning the drawn centre unwinds the compensation every frame, so the
-                // sheet peels exactly where it lies and only the authored lift moves it.
-                PlaceDrawnAt(peel, drawnHome + new Vector3(0f, peelLift * e, -0.05f * e));
+                // Writing the transform let the paper slide: the curl's centroid compensation moves
+                // the drawn mesh away from its own transform as the roll grows - up to 3.23 world
+                // units on the cat - so the transform sat still and the sheet wandered off ("random
+                // bir yere giderek aciliyor"). Pinning the centre fixes that but buys the other
+                // complaint, rotation in place. Pinning the edge fixes both.
+                Vector3 lift = new Vector3(0f, peelLift * e, -0.05f * e);
+                Vector3 edgeNowP = peel.AnchoredEdgeWorld();
+                Vector3 centreNowP = peel.VisualWorldCentre(9);
+                PlaceDrawnAt(peel, centreNowP + (peelEdgeHome + lift - edgeNowP));
 
                 // Two-layer rule from .plan-build/audio.md: main hit, second accent 0.10-0.14 s later.
                 if (!secondPeelLayer && SequenceClock - _t0 >= tTap + 0.10f)
@@ -1205,8 +1213,14 @@ namespace Case3
             // The flight starts from exactly where the peel left the PAPER, which is now a known
             // point rather than a measured one: the peel pinned it there every frame. Measuring it
             // again would only reintroduce the risk of the two disagreeing by a frame.
-            Vector3 drawnLaunch = drawnHome + new Vector3(0f, peelLift, -0.05f);
-            PlaceDrawnAt(peel, drawnLaunch);
+            // The flight starts from wherever holding the edge has left the paper - read it, do not
+            // assume it, because the centre has legitimately travelled during the roll.
+            Vector3 endLift = new Vector3(0f, peelLift, -0.05f);
+            Vector3 edgeEnd = peel.AnchoredEdgeWorld();
+            Vector3 centreEnd = peel.VisualWorldCentre(9);
+            PlaceDrawnAt(peel, centreEnd + (peelEdgeHome + endLift - edgeEnd));
+            Vector3 drawnLaunch = peel.VisualWorldCentre(9);
+            drawnLaunch.z = drawnHome.z + endLift.z;
 
             // PEEL COMPLETION IS THE PROMOTION INSTANT. In the reference the jar is uncovered at
             // t=4.11 and is a fully collectible sticker from that frame on - it is tapped and
