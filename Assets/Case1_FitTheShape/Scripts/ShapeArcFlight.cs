@@ -158,7 +158,7 @@ namespace Case1
         {
             if (!Playable(index))
             {
-                Debug.Log("[Case1Flight] SELECT_REFUSED index=" + index +
+                Shared.Sequencing.SeqLog.Info("[Case1Flight] SELECT_REFUSED index=" + index +
                           " reason=" + (index >= 0 && index < Count && entries[index] != null
                                         ? (entries[index].Consumed ? "already-used" : "no-matching-cell")
                                         : "out-of-range"));
@@ -170,7 +170,7 @@ namespace Case1
             ComputeGrowFactor(e);
             AttachTrail(e.shape);
 
-            Debug.Log(string.Format("[Case1Flight] SELECTED shape={0} -> cell={1} ({2}) colour={3}",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case1Flight] SELECTED shape={0} -> cell={1} ({2}) colour={3}",
                 e.shape.name, e.targetCell,
                 drum != null && e.targetCell >= 0 && e.targetCell < drum.CellCount ? drum.CellName(e.targetCell) : "?",
                 e.matchNote));
@@ -217,7 +217,7 @@ namespace Case1
             ComputeGrowFactor(e);
             AttachTrail(e.shape);
 
-            Debug.Log(string.Format("[Case1Flight] SELECTED_DYNAMIC shape={0} -> cell={1} ({2})",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case1Flight] SELECTED_DYNAMIC shape={0} -> cell={1} ({2})",
                 e.shape.name, e.targetCell,
                 drum != null && e.targetCell >= 0 && e.targetCell < drum.CellCount ? drum.CellName(e.targetCell) : "?"));
             return true;

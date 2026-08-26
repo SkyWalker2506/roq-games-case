@@ -309,7 +309,7 @@ namespace Case4
 
             if (dist < minPull)
             {
-                Debug.Log(string.Format("[Case4] AIM_CANCELLED pull={0:0.00} < {1:0.00}; puck stays on the disc",
+                Shared.Sequencing.SeqLog.Info(string.Format("[Case4] AIM_CANCELLED pull={0:0.00} < {1:0.00}; puck stays on the disc",
                     dist, minPull));
                 return;
             }
@@ -319,7 +319,7 @@ namespace Case4
             LastDirection = dir;
             LastPower = power;
 
-            Debug.Log(string.Format("[Case4] RELEASE {0} dir={1} pull={2:0.00} power={3:0.00}",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case4] RELEASE {0} dir={1} pull={2:0.00} power={3:0.00}",
                 simulated ? "(simulated)" : "(pointer)", dir.ToString("0.00"), dist, power));
 
             // A simulated release has no real input frame behind it, so the director's own
@@ -327,7 +327,7 @@ namespace Case4
             if (simulated) director.AllowPlayWithoutInput();
 
             LastLaunchAccepted = director.LaunchFromPlayer(dir, power);
-            Debug.Log("[Case4] LAUNCH_ACCEPTED=" + LastLaunchAccepted);
+            Shared.Sequencing.SeqLog.Info("[Case4] LAUNCH_ACCEPTED=" + LastLaunchAccepted);
         }
 
         /// <summary>Middle of the stack, the fallback aim point for the gate log.</summary>

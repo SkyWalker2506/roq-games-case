@@ -256,7 +256,7 @@ namespace Case2
             if (_lastLogged != stamp)
             {
                 _lastLogged = stamp;
-                Debug.Log(string.Format(
+                Shared.Sequencing.SeqLog.Info(string.Format(
                     "[Case2] HOVER hole={0} holeShape={1} blockShape={2} match={3} glow={4} intensity={5:0.000}",
                     name, shapeKey, otherShapeKey, match, match ? "ON" : "OFF", _glow));
             }
@@ -1012,7 +1012,7 @@ namespace Case2
             if (!_loggedCavityShape)
             {
                 _loggedCavityShape = true;
-                Debug.Log(string.Format("[Case2] CAVITY hole={0} shapeKey={1} resolved={2} wallTint={3:0.000},{4:0.000},{5:0.000} floorTint={6:0.000},{7:0.000},{8:0.000}",
+                Shared.Sequencing.SeqLog.Info(string.Format("[Case2] CAVITY hole={0} shapeKey={1} resolved={2} wallTint={3:0.000},{4:0.000},{5:0.000} floorTint={6:0.000},{7:0.000},{8:0.000}",
                     name, shapeKey, cavityShape, wallTint.r, wallTint.g, wallTint.b, floorTint.r, floorTint.g, floorTint.b));
             }
             Color wall = new Color(cavity.r * wallTint.r, cavity.g * wallTint.g, cavity.b * wallTint.b, 1f);

@@ -812,7 +812,7 @@ namespace Case2
             _lastDropMatched = match;
             ClearHover();
 
-            Debug.Log(string.Format("[Case2] DROP block={0} shape={1} over={2} match={3} -> {4}",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case2] DROP block={0} shape={1} over={2} match={3} -> {4}",
                 block != null ? block.name : "<null>", _shapeKey,
                 hole != null ? hole.name : "<empty board>", match,
                 match ? "SEQUENCE" : "RETURN_HOME"));
@@ -882,7 +882,7 @@ namespace Case2
                     if (holes[i] == null || !holes[i].Matches(_shapeId)) continue;
                     _litHole = holes[i];
                     _litHole.SetLit(true);
-                    Debug.Log(string.Format("[Case2] PICKUP block={0} shape={1} lights hole={2} (shape={3})",
+                    Shared.Sequencing.SeqLog.Info(string.Format("[Case2] PICKUP block={0} shape={1} lights hole={2} (shape={3})",
                         block != null ? block.name : "<null>", _shapeKey, _litHole.name, _litHole.shapeKey));
                     break;
                 }

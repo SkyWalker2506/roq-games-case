@@ -136,7 +136,7 @@ namespace Case1
             if (drum != null) drum.ResetAll();
             VFXPool.ReclaimAll();
             Ready = true;
-            Debug.Log(string.Format("[Case1] warm-up finished after {0:0.00} s of play, {1} stable frames; " +
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case1] warm-up finished after {0:0.00} s of play, {1} stable frames; " +
                                     "scene is idle and waiting for a tap ({2} playable shapes)",
                 Time.realtimeSinceStartup - (deadline - warmTimeout), stable, PlayableCount()));
         }
@@ -198,7 +198,7 @@ namespace Case1
             // Must be alive on the deck and in the front row
             if (!deck.IsInFrontRow(shape))
             {
-                Debug.Log("[Case1Tap] Tap on " + shape.name + " ignored (not in front row)");
+                Shared.Sequencing.SeqLog.Info("[Case1Tap] Tap on " + shape.name + " ignored (not in front row)");
                 PlayRejectAnimation(shape);
                 return false;
             }
@@ -216,7 +216,7 @@ namespace Case1
             int targetCell = drum.FindAvailableLiveSlot(shapeId);
             if (targetCell < 0)
             {
-                Debug.Log("[Case1Tap] No matching available live slot for " + shapeId + "; rejecting with in-place shake");
+                Shared.Sequencing.SeqLog.Info("[Case1Tap] No matching available live slot for " + shapeId + "; rejecting with in-place shake");
                 PlayRejectAnimation(shape);
                 return false;
             }
@@ -287,7 +287,7 @@ namespace Case1
 
             Transform flying = flight.CurrentShape;
             int cell = flight.TargetCell;
-            Debug.Log(string.Format("[Case1] RUN_BEGIN shape={0} targetCell={1} ({2}) emptiedSlot={3}",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case1] RUN_BEGIN shape={0} targetCell={1} ({2}) emptiedSlot={3}",
                 flying != null ? flying.name : "<null>", cell, drum.CellName(cell), _emptiedDeckSlot));
 
             AudioService.Prewarm();
@@ -317,7 +317,7 @@ namespace Case1
             deck.MarkGone(flying);
             int moving = deck.CountMoving(_emptiedDeckSlot);
             deck.Reflow(_emptiedDeckSlot);
-            Debug.Log("[Case1] PROOF deck reflow: " + moving + " shape(s) compact into slot " + _emptiedDeckSlot +
+            Shared.Sequencing.SeqLog.Info("[Case1] PROOF deck reflow: " + moving + " shape(s) compact into slot " + _emptiedDeckSlot +
                       " while the hero is still in flight");
 
             yield return flight.FlyArc(arcDuration);
@@ -342,15 +342,15 @@ namespace Case1
             Fire(JuiceEvent.ImpactVFX, "target-cell bloom + restrained horizontal wheel ripple");
             Fire(JuiceEvent.SquashStretch, "target cell gives one compact compression/rebound");
 
-            Debug.Log(string.Format("[Case1] PROOF reaction kept local: {0} immediate neighbours, ripple span {1:0.000} s across {2} cells",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case1] PROOF reaction kept local: {0} immediate neighbours, ripple span {1:0.000} s across {2} cells",
                 drum.SpillCount, drum.RippleSpan, drum.CellCount));
 
             _entrySpan = SequenceTime - entryStart;
             EndStep();
 
-            Debug.Log(string.Format("[Case1] PROOF flight {0:0.00} s + entry {1:0.00} s = {2:0.00} s; total {3:0.00} s",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case1] PROOF flight {0:0.00} s + entry {1:0.00} s = {2:0.00} s; total {3:0.00} s",
                 _flightSpan, _entrySpan, _flightSpan + _entrySpan, SequenceTime));
-            Debug.Log(string.Format("[Case1] RUN_END shape={0} landed in {1}; {2} shape(s) still tappable",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case1] RUN_END shape={0} landed in {1}; {2} shape(s) still tappable",
                 flying != null ? flying.name : "?", drum.CellName(cell), PlayableCount()));
         }
 

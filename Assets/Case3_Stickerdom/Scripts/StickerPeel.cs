@@ -484,7 +484,7 @@ namespace Case3
             // Verbose per-sheet build log, off by default: fourteen of these open every session and
             // they buried the lines that matter. Set verboseBuildLog to get them back.
             if (verboseBuildLog)
-                Debug.Log(string.Format(
+                Shared.Sequencing.SeqLog.Info(string.Format(
                     "[Case3Peel] mesh built for {0}: {1}x{1} grid ({2} verts), local size {3:0.00}x{4:0.00}, " +
                     "curl radius {5:0.000} (dir {6}), fold sweep {7:0.00} -> {8:0.00}",
                     sticker.name, segments, (segments + 1) * (segments + 1), size.x, size.y,

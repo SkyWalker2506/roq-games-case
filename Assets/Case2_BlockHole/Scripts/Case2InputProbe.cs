@@ -167,7 +167,7 @@ namespace Case2
         void Line(string s)
         {
             _log.AppendLine(s);
-            Debug.Log("[Case2Gate] " + s);
+            Shared.Sequencing.SeqLog.Info("[Case2Gate] " + s);
         }
 
         void Check(bool ok, string what)
@@ -1668,7 +1668,7 @@ namespace Case2
             Passed = _failures == 0;
             _log.AppendLine("INPUT_GATE " + (Passed ? "GREEN" : "RED") + " failures=" + _failures);
             Transcript = _log.ToString();
-            Debug.Log("[Case2Gate] INPUT_GATE " + (Passed ? "GREEN" : "RED") + " failures=" + _failures);
+            Shared.Sequencing.SeqLog.Info("[Case2Gate] INPUT_GATE " + (Passed ? "GREEN" : "RED") + " failures=" + _failures);
             Finished = true;
         }
     }

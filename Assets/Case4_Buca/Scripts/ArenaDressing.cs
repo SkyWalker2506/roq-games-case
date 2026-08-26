@@ -142,7 +142,7 @@ namespace Case4
             props += Boulder(t, "ForeBoulder", bx, bz, bs, byaw, btall);
             Shadow(t, "ForeBoulderShadow", bx, bz, bs * 1.5f, bs * 1.0f, bs * 0.55f); shadows++;
 
-            Debug.Log(string.Format("[Case4] DRESSING built {0} prop pieces + {1} shadows under '{2}'; " +
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case4] DRESSING built {0} prop pieces + {1} shadows under '{2}'; " +
                                     "colliders=0, shadowCasting=Off", props, shadows, RootName));
         }
 

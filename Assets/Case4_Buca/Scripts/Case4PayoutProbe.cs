@@ -49,7 +49,7 @@ namespace Case4
         void Line(string s)
         {
             _log.AppendLine(s);
-            Debug.Log("[Case4Payout] " + s);
+            Shared.Sequencing.SeqLog.Info("[Case4Payout] " + s);
         }
 
         IEnumerator Start()

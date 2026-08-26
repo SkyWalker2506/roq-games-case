@@ -90,7 +90,7 @@ namespace Shared.Sequencing
                     if (_fontAsset == null)
                         Debug.LogError("[UIStyle] TMP_FONT_MISSING no TMP font asset found - import TMP essentials.");
                     else
-                        Debug.Log("[UIStyle] TMP_FONT " + _fontAsset.name);
+                        Shared.Sequencing.SeqLog.Info("[UIStyle] TMP_FONT " + _fontAsset.name);
                 }
 
                 return _fontAsset;
@@ -328,7 +328,7 @@ namespace Shared.Sequencing
         public void OnClick()
         {
             Scene active = SceneManager.GetActiveScene();
-            Debug.Log("[ReplayButton] REPLAY_RELOAD scene=" + active.name + " buildIndex=" + active.buildIndex);
+            Shared.Sequencing.SeqLog.Info("[ReplayButton] REPLAY_RELOAD scene=" + active.name + " buildIndex=" + active.buildIndex);
             SceneManager.LoadScene(active.buildIndex);
         }
 
@@ -367,7 +367,7 @@ namespace Shared.Sequencing
                                            new Vector2(1f, 1f),                       // top-right corner
                                            new Vector2(-EdgeMargin, -EdgeMargin));
 
-            Debug.Log("[ReplayButton] REPLAY_UI corner=top-right size=" + ButtonSize.x + "x" + ButtonSize.y +
+            Shared.Sequencing.SeqLog.Info("[ReplayButton] REPLAY_UI corner=top-right size=" + ButtonSize.x + "x" + ButtonSize.y +
                       " margin=" + EdgeMargin);
             return btn;
         }

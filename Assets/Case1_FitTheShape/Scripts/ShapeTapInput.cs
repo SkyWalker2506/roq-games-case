@@ -32,7 +32,7 @@ namespace Case1
             Transform hitShape = PickTrayShape(screenPoint);
             if (hitShape == null)
             {
-                Debug.Log("[Case1Tap] press at " + screenPoint + " hit no shape; ignored");
+                Shared.Sequencing.SeqLog.Info("[Case1Tap] press at " + screenPoint + " hit no shape; ignored");
                 return;
             }
 

@@ -230,7 +230,7 @@ namespace Case2
             yield return drag.MoveTo(targetHole.SnapPoint, Remaining(tTarget), EaseType.Linear);
             yield return drag.Hover(Remaining(tDrop));
 
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case2] PROOF matching hole '{0}' (shape={1}) lit for block shape={2}: glow {3:0.000} -> neon ON",
                 targetHole.name, targetHole.shapeKey, drag.ShapeKey, targetHole.GlowIntensity));
             EndStep();
@@ -238,7 +238,7 @@ namespace Case2
             // ---------------------------------------------------------- 3-5. drop, shatter, sink
             yield return DropTail(drag, targetHole, true, tDrop);
 
-            Debug.Log(string.Format("[Case2] TIMING run={0:0.000} s over {1} frames ({2:0.0} fps)",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case2] TIMING run={0:0.000} s over {1} frames ({2:0.0} fps)",
                 SequenceTime, Time.frameCount - _startFrame,
                 (Time.frameCount - _startFrame) / Mathf.Max(0.001f, SequenceTime)));
         }
@@ -355,7 +355,7 @@ namespace Case2
                 float observedFall = SequenceTime - _dropTime;
                 float authoredFall = SnapSecondsFixed + DwellSecondsFixed + shatterDuration + sinkDuration;
                 Fire(JuiceEvent.Deform, string.Format("shards fully inside the hole; drop -> end of fall = {0:0.00} s", authoredFall));
-                Debug.Log(string.Format("[Case2] PROOF drop -> end of readable fall = {0:0.000} s (authored {1:0.000} s)",
+                Shared.Sequencing.SeqLog.Info(string.Format("[Case2] PROOF drop -> end of readable fall = {0:0.000} s (authored {1:0.000} s)",
                     observedFall, authoredFall));
             }
 
@@ -388,7 +388,7 @@ namespace Case2
 
         void HandleUserMiss(BlockDragController d, HoleGlowHighlight hole)
         {
-            Debug.Log(string.Format("[Case2] MISS block={0} over={1} -> sequence NOT started (playing={2}, tail={3})",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case2] MISS block={0} over={1} -> sequence NOT started (playing={2}, tail={3})",
                 d != null && d.Block != null ? d.Block.name : "<null>",
                 hole != null ? hole.name : "<empty board>", IsPlaying, _userTailRunning));
         }
@@ -417,7 +417,7 @@ namespace Case2
             BlockDragController[] all = AllDrags();
             int left = 0;
             for (int i = 0; i < all.Length; i++) if (!all[i].Consumed) left++;
-            Debug.Log(string.Format("[Case2] DELIVERED block={0} into {1}; blocks still draggable = {2}",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case2] DELIVERED block={0} into {1}; blocks still draggable = {2}",
                 d.Block != null ? d.Block.name : "<null>", hole.name, left));
 
             _userTailRunning = false;

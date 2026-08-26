@@ -100,7 +100,7 @@ public sealed class MenuNavigation : MonoBehaviour
             return;
         }
 
-        Debug.Log("[MenuNavigation] NAV_LOAD case=" + index + " scene=" + scene);
+        Shared.Sequencing.SeqLog.Info("[MenuNavigation] NAV_LOAD case=" + index + " scene=" + scene);
         SceneManager.LoadScene(scene);
     }
 
@@ -113,7 +113,7 @@ public sealed class MenuNavigation : MonoBehaviour
             return;
         }
 
-        Debug.Log("[MenuNavigation] NAV_HOME from=" + SceneManager.GetActiveScene().name);
+        Shared.Sequencing.SeqLog.Info("[MenuNavigation] NAV_HOME from=" + SceneManager.GetActiveScene().name);
         SceneManager.LoadScene(MenuSceneName);
     }
 
@@ -154,11 +154,11 @@ public sealed class MenuNavigation : MonoBehaviour
             b.onClick.AddListener(() => LoadCase(index));
             _caseButtons.Add(b);
 
-            Debug.Log("[MenuNavigation] menu entry " + i + " -> " + CaseScenes[i] +
+            Shared.Sequencing.SeqLog.Info("[MenuNavigation] menu entry " + i + " -> " + CaseScenes[i] +
                       " loadable=" + Application.CanStreamedLevelBeLoaded(CaseScenes[i]));
         }
 
-        Debug.Log("[MenuNavigation] MENU_READY buttons=" + _caseButtons.Count);
+        Shared.Sequencing.SeqLog.Info("[MenuNavigation] MENU_READY buttons=" + _caseButtons.Count);
     }
 
     /// <summary>Title, a short accent rule and the one-line subtitle, anchored to the top of the canvas.</summary>
@@ -275,7 +275,7 @@ public sealed class MenuNavigation : MonoBehaviour
             new Vector2(ReplayButton.EdgeMargin, -ReplayButton.EdgeMargin));
         _homeButton.onClick.AddListener(GoHome);
 
-        Debug.Log("[MenuNavigation] HOME_READY scene=" + SceneManager.GetActiveScene().name +
+        Shared.Sequencing.SeqLog.Info("[MenuNavigation] HOME_READY scene=" + SceneManager.GetActiveScene().name +
                   " corner=top-left size=" + ReplayButton.ButtonSize.x + "x" +
                   ReplayButton.ButtonSize.y +
                   " margin=" + ReplayButton.EdgeMargin +

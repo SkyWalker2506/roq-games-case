@@ -31,7 +31,7 @@ namespace Case4
                 owner = GetComponentInParent<PuckLauncher>();
                 if (owner == null) owner = FindFirstObjectByType<PuckLauncher>(FindObjectsInactive.Include);
                 if (owner != null)
-                    Debug.Log("[Case4] RELAY_REBOUND owner recovered on " + name + "; contacts were being dropped");
+                    Shared.Sequencing.SeqLog.Info("[Case4] RELAY_REBOUND owner recovered on " + name + "; contacts were being dropped");
                 return owner;
             }
         }

@@ -32,7 +32,7 @@ namespace Case4
         void Line(string s)
         {
             _log.AppendLine(s);
-            Debug.Log("[Case4Gate] " + s);
+            Shared.Sequencing.SeqLog.Info("[Case4Gate] " + s);
         }
 
         void Check(bool ok, string what)
@@ -734,7 +734,7 @@ namespace Case4
                         _sawLaunch = true;
                         _launchPos = pos;
                         _launchColliderEnabled = col != null && col.enabled;
-                        Debug.Log(string.Format(
+                        Shared.Sequencing.SeqLog.Info(string.Format(
                             "[Case4Gate] TRACE launch at t={0:0.000} pos={1} vel={2} speed={3:0.00} colliderEnabled={4}",
                             Time.time, pos.ToString("0.000"), vel.ToString("0.00"), vel.magnitude,
                             _launchColliderEnabled));
@@ -747,7 +747,7 @@ namespace Case4
                     if (outside > radius && !_escaped)
                     {
                         _escaped = true;
-                        Debug.Log(string.Format(
+                        Shared.Sequencing.SeqLog.Info(string.Format(
                             "[Case4Gate] TRACE ESCAPE at t={0:0.000} pos={1} vel={2} speed={3:0.00} " +
                             "outsideBy={4:0.000}u colliderEnabled={5}",
                             Time.time, pos.ToString("0.000"), vel.ToString("0.00"), vel.magnitude,
@@ -757,7 +757,7 @@ namespace Case4
                     if (_sawLaunch && traceLines < 40 && Time.frameCount % 6 == 0)
                     {
                         traceLines++;
-                        Debug.Log(string.Format("[Case4Gate] TRACE t={0:0.000} pos={1} vel={2} speed={3:0.00} kin={4} col={5}",
+                        Shared.Sequencing.SeqLog.Info(string.Format("[Case4Gate] TRACE t={0:0.000} pos={1} vel={2} speed={3:0.00} kin={4} col={5}",
                             Time.time, pos.ToString("0.00"), vel.ToString("0.0"), vel.magnitude,
                             kinematic, col != null && col.enabled));
                     }
@@ -924,7 +924,7 @@ namespace Case4
             Passed = _failures == 0;
             _log.AppendLine("CASE4_GATE " + (Passed ? "GREEN" : "RED") + " failures=" + _failures);
             Transcript = _log.ToString();
-            Debug.Log("[Case4Gate] CASE4_GATE " + (Passed ? "GREEN" : "RED") + " failures=" + _failures);
+            Shared.Sequencing.SeqLog.Info("[Case4Gate] CASE4_GATE " + (Passed ? "GREEN" : "RED") + " failures=" + _failures);
             Finished = true;
         }
     }

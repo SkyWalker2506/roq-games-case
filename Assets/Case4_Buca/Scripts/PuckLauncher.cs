@@ -442,7 +442,7 @@ namespace Case4
                 {
                     _visual.localPosition = want;
                     healed = true;
-                    Debug.Log(string.Format(
+                    Shared.Sequencing.SeqLog.Info(string.Format(
                         "[Case4] COIN_SEAT visual local y {0:0.000} -> {1:0.000} (padLift={2:0.000} + " +
                         "measured seat={3:0.000}); coin now sits at world y={4:0.000}",
                         _visualRestLocalPos.y, want.y, visualPadLift, _visualSeatLift, _visual.position.y));
@@ -659,7 +659,7 @@ namespace Case4
             {
                 Material round = ResolveRoundTrailMaterial();
                 if (round != null) dropRenderer.sharedMaterial = round;
-                Debug.Log("[Case4] TRAIL_DROPLET_MATERIAL " +
+                Shared.Sequencing.SeqLog.Info("[Case4] TRAIL_DROPLET_MATERIAL " +
                           (round != null ? round.name : "<none - the prefab's own sprite is being drawn>") +
                           " (trailGlowMaterial wired=" + (trailGlowMaterial != null) + ")");
             }
@@ -1351,7 +1351,7 @@ namespace Case4
             ClearTrail();
             HidePad();
 
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] RESUME_IN_PLACE next shot starts at {0} ({1:0.000}u from the rest disc {2}; " +
                 "de-penetration moved it {3:0.000}u)",
                 resolved.ToString("0.000"), Vector3.Distance(resolved, _restPos),
@@ -1473,7 +1473,7 @@ namespace Case4
             SetTrail(true);
             HidePad();   // idempotent; the disc is already off and stays off for the whole run
 
-            Debug.Log(string.Format("[Case4] PHYSICS_LAUNCH dir={0} speed={1:0.00} from={2} rbKinematic={3} collider={4}",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case4] PHYSICS_LAUNCH dir={0} speed={1:0.00} from={2} rbKinematic={3} collider={4}",
                 d.ToString("0.000"), speed, puck.position.ToString("0.00"),
                 _rb.isKinematic, ColliderSummary()));
         }
@@ -1492,7 +1492,7 @@ namespace Case4
             if (_rb == null || _bleeding) return;
             _bleeding = true;
             _rb.linearDamping = restingDamping;
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] PUCK_BLEEDOFF damping {0:0.0} applied at speed {1:0.00} after {2:0.000}s of flight; " +
                 "contacts stay live",
                 restingDamping, Speed, Time.time - _launchTime));
@@ -1638,7 +1638,7 @@ namespace Case4
                     if (payout != null)
                     {
                         payout.ArmFromContact(_impactPoint);
-                        Debug.Log(string.Format(
+                        Shared.Sequencing.SeqLog.Info(string.Format(
                             "[Case4] COIN_ARMED from solver contact at {0} (block '{1}', normalSpeed={2:0.00})",
                             _impactPoint.ToString("0.###"), collision.collider.name, normalSpeed));
                     }
@@ -1668,7 +1668,7 @@ namespace Case4
             // the only way to know that the lost contact was the puck extracting itself from the rail
             // it used to be launched from inside of - rather than a leg of the bank going missing - is
             // to read the names back.
-            Debug.Log(string.Format("[Case4] RAIL_CONTACT #{0} with {1} at {2} (t+{3:0.000}s)",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case4] RAIL_CONTACT #{0} with {1} at {2} (t+{3:0.000}s)",
                 _bounces, what != null ? what.name : "<unknown>", at.ToString("0.00"), Time.time));
             if (puck != null)
             {

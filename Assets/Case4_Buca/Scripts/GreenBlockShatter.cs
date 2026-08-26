@@ -468,7 +468,7 @@ namespace Case4
             if (primary.Col != _primaryImpactCollider)
             {
                 ApplyPuckCollisionFilter(primary);
-                Debug.Log(string.Format(
+                Shared.Sequencing.SeqLog.Info(string.Format(
                     "[Case4] IMPACT_FILTER primary={0} pos=({1:0.000},{2:0.000}) rayT={3} " +
                     "puck=({4:0.000},{5:0.000}) heading=({6:0.00},{7:0.00})",
                     primary.Tr.name, primary.Tr.position.x, primary.Tr.position.z,
@@ -481,7 +481,7 @@ namespace Case4
                 // Logged separately from the selection above, which only prints on a CHANGE. Without
                 // this line a run in which the ray never fired and the fallback happened to name the
                 // right block is indistinguishable from one in which the ray did the work.
-                Debug.Log(string.Format("[Case4] IMPACT_FILTER_LOCK primary={0} rayT={1:0.000} at puck=({2:0.000},{3:0.000})",
+                Shared.Sequencing.SeqLog.Info(string.Format("[Case4] IMPACT_FILTER_LOCK primary={0} rayT={1:0.000} at puck=({2:0.000},{3:0.000})",
                     primary.Tr.name, hitT, origin.x, origin.z));
             }
         }
@@ -851,7 +851,7 @@ namespace Case4
                         new Vector3((x0 + x1) * 0.5f, y0, (z0 + z1) * 0.5f),
                         new Vector3(x1 - x0, 0f, z1 - z0));
                     _settleAreaState = 1;
-                    Debug.Log(string.Format("[Case4] SETTLE_AREA x {0:0.000}..{1:0.000}  z {2:0.000}..{3:0.000} " +
+                    Shared.Sequencing.SeqLog.Info(string.Format("[Case4] SETTLE_AREA x {0:0.000}..{1:0.000}  z {2:0.000}..{3:0.000} " +
                                             "(right bound = {4})", x0, x1, z0, z1,
                                             hasDivider && x1 < r.min.x ? "Divider" : "Rail_Right"));
                 }
@@ -939,7 +939,7 @@ namespace Case4
                 q.EndPos = end;
             }
 
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] SETTLE_FIT scales x-={0:0.000} x+={1:0.000} z-={2:0.000} z+={3:0.000}; " +
                 "residual clamp on {4}/{5} blocks, worst {6:0.000}u",
                 sxNeg, sxPos, szNeg, szPos, clamped, poses.Count, worstClamp));

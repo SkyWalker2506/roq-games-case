@@ -442,13 +442,14 @@ public static class Case3PageEntries
         tmp.fontSize = 4.04f;
         tmp.enableAutoSizing = false;
         tmp.fontStyle = FontStyles.Bold;
-        tmp.color = CounterInk;
+        tmp.color = Color.white;                 // heavy white on a black frame; see RefreshStackLabel
         tmp.alignment = TextAlignmentOptions.Right;
         tmp.margin = Vector4.zero;
-        // The reference's counter is a dark red with a white outline, because it is printed
-        // over the art rather than into an empty band and has to stay legible on top of it.
-        tmp.outlineColor = Color.white;
-        tmp.outlineWidth = 0.22f;
+        // The counter is printed over the art rather than into an empty band, so it has to stay
+        // legible on top of it. White on a black frame does that at any background lightness; the
+        // dark red it used to be lost contrast on the darker sheets.
+        tmp.outlineColor = Color.black;
+        tmp.outlineWidth = 0.35f;
         tmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
         tmp.raycastTarget = false;
         tmp.enabled = false;                     // nothing collected yet

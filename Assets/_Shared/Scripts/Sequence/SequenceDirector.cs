@@ -90,7 +90,7 @@ namespace Shared.Sequencing
             {
                 if (!InputIsActiveThisFrame())
                 {
-                    Debug.Log("[SequenceDirector] AUTOPLAY_SUPPRESSED name=" + SequenceName +
+                    Shared.Sequencing.SeqLog.Info("[SequenceDirector] AUTOPLAY_SUPPRESSED name=" + SequenceName +
                               " reason=no-input-behind-call");
                     return;
                 }
@@ -167,7 +167,7 @@ namespace Shared.Sequencing
         {
             if (!autoPlayForCapture)
             {
-                Debug.Log("[SequenceDirector] AUTOPLAY_DISABLED name=" + SequenceName +
+                Shared.Sequencing.SeqLog.Info("[SequenceDirector] AUTOPLAY_DISABLED name=" + SequenceName +
                           " scene=" + gameObject.scene.name + " isPlaying=" + IsPlaying);
                 yield break;
             }

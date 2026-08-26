@@ -244,7 +244,7 @@ namespace Case4
             float frac = flightDuration > 0.0001f ? stagger / flightDuration : 0f;
             _pathPx = px;
             _gapPx = px * frac;
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] COIN_ARC screen path {0:0} px over {1} samples; uniform neighbour gap {2:0.0} px " +
                 "at stagger/flightDuration {3:0.0000} (coinScale {4:0.000})",
                 px, _curve.Count, _gapPx, frac, coinScale));
@@ -317,7 +317,7 @@ namespace Case4
                 ? Mathf.Min(coinCount, Mathf.FloorToInt(_exitPathPx / _gapPx))
                 : 0;
 
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] COIN_EXIT {0} exitsFrame={1} firstCrossing=({2:0.000},{3:0.000}) " +
                 "onScreenPath={4:0} px of {5:0} px; coins on screen at once ~{6} of {7} " +
                 "(reference: straight ribbon (0.168,0.441)->(0.947,0.971), extrapolated crossing (0.990,1.000))",
@@ -333,7 +333,7 @@ namespace Case4
             // built from a contactless origin whose length means nothing.
             float diameters = _gapPx / RefCoinDiameterPx;
             bool gapOk = diameters >= 1.00f && diameters <= 1.25f;
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] COIN_GAP {0} neighbour gap {1:0.0} px = {2:0.00} coin diameters " +
                 "(band 1.00..1.25, reference 63.6 px = 1.18)",
                 _armed && originInFrame ? (gapOk ? "PASS" : "FAIL") : "informational-unarmed", _gapPx, diameters));
@@ -480,7 +480,7 @@ namespace Case4
                 // sequence timeline, so a shot that missed still rained gold.
                 _blockedLaunchAttempts++;
                 _launched = 0;
-                Debug.Log("[Case4] COIN_BLOCKED no stack contact armed this stream; coins launched = 0");
+                Shared.Sequencing.SeqLog.Info("[Case4] COIN_BLOCKED no stack contact armed this stream; coins launched = 0");
                 yield break;
             }
 
@@ -508,7 +508,7 @@ namespace Case4
                 // not earn it.
                 if (!_armed)
                 {
-                    Debug.Log(string.Format(
+                    Shared.Sequencing.SeqLog.Info(string.Format(
                         "[Case4] COIN_ABORT disarmed mid-stream after {0} of {1} coins", _launched, count));
                     yield break;
                 }
@@ -527,7 +527,7 @@ namespace Case4
             // Report what the stream actually did, not what it was asked to do. The old pacing rounded
             // every stagger up to a whole capture frame and nothing in the log said so; this line makes
             // the effective rate readable straight from the capture.
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] COIN_PACING {0} coins over {1:0.000}s wall = {2:0.0000}s effective stagger " +
                 "(authored {3:0.0000}, flightDuration {4:0.000}, capture frame {5:0.0000}s)",
                 _launched, Time.time - t0,

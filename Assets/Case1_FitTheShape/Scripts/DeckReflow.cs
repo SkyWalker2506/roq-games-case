@@ -159,7 +159,7 @@ namespace Case1
                 e.shape.localScale = ScaleForRow(e, isFront);
                 if (isFront) front++; else back++;
             }
-            Debug.Log("[Case1Reflow] ROW_SCALES entries=" + entries.Length + " front=" + front +
+            Shared.Sequencing.SeqLog.Info("[Case1Reflow] ROW_SCALES entries=" + entries.Length + " front=" + front +
                       " back=" + back + " flatten=" + backRowFlatten.ToString("0.00") +
                       " columns=" + columns);
         }

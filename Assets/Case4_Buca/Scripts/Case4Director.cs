@@ -154,7 +154,7 @@ namespace Case4
             // sending the puck to the far right used to be the same call.
             if (keepInPlace) launcher.ResumeFrom(restingAt);
 
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] ARMED for the next shot: stack rebuilt, puck stays where it stopped ({0})",
                 keepInPlace ? launcher.puck.position.ToString("0.00") : "n/a"));
         }
@@ -204,7 +204,7 @@ namespace Case4
             if (_targetCamera != null)
                 _targetCamera.transform.localPosition = _cameraKickBase;
             Ready = true;
-            Debug.Log("[Case4] READY: waiting for the player to aim and release the puck");
+            Shared.Sequencing.SeqLog.Info("[Case4] READY: waiting for the player to aim and release the puck");
             yield return base.Start();
         }
 
@@ -272,7 +272,7 @@ namespace Case4
             // Merely sleeping the bodies preserves any tiny prewarm drift in the first pass only.
             if (shatter != null) shatter.ResetInstant();
             Physics.SyncTransforms();
-            Debug.Log(string.Format("[Case4] WARMUP done waited={0:0.000}s stackMoved={1:0.000}",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case4] WARMUP done waited={0:0.000}s stackMoved={1:0.000}",
                 Time.realtimeSinceStartup - started, shatter != null ? shatter.MaxDisplacement() : 0f));
         }
 
@@ -296,7 +296,7 @@ namespace Case4
             _launchDir = d.normalized;
             _launchPower = Mathf.Clamp01(power);
 
-            Debug.Log(string.Format("[Case4] PLAYER_LAUNCH dir={0} power={1:0.00}",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case4] PLAYER_LAUNCH dir={0} power={1:0.00}",
                 _launchDir.ToString("0.000"), _launchPower));
 
             Play();
@@ -382,7 +382,7 @@ namespace Case4
             if (anticipationDuration > 0.001f)
                 Fire(JuiceEvent.Anticipation, "puck compresses into the disc for " + anticipationDuration.ToString("0.00") + " s before firing");
             else
-                Debug.Log("[Case4] ANTICIPATION_SKIPPED anticipationDuration=0; no compression is drawn and none is reported");
+                Shared.Sequencing.SeqLog.Info("[Case4] ANTICIPATION_SKIPPED anticipationDuration=0; no compression is drawn and none is reported");
             launcher.Anticipate(anticipationDuration);
             AudioService.Play(SfxId.TapPop, 0.55f, 0.9f);
             yield return WaitUntil(scriptedIdle + anticipationDuration);
@@ -396,7 +396,7 @@ namespace Case4
             if (wall != null && wall.IsWired)
                 Fire(JuiceEvent.ImpactVFX, "arena rim switches from idle white to cyan on release");
             else
-                Debug.Log("[Case4] RIM_FLASH_UNWIRED release flash requested but the rim keeps its authored materials; nothing is drawn");
+                Shared.Sequencing.SeqLog.Info("[Case4] RIM_FLASH_UNWIRED release flash requested but the rim keeps its authored materials; nothing is drawn");
 
             launcher.SetTrail(true);
             Fire(JuiceEvent.Trail, "short spark trail, " + launcher.trailLifetime.ToString("0.00") + " s lifetime; speed cue only");
@@ -474,13 +474,13 @@ namespace Case4
             if (launcher.StackHit) flightEnd = "stack";
             float flightTime = Time.time - flightStart;
             bool reached = launcher.StackHit;
-            Debug.Log(string.Format("[Case4] FLIGHT {0:0.000}s rails hit={1} travelled={2:0.00} speed={3:0.00} reachedStack={4}",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case4] FLIGHT {0:0.000}s rails hit={1} travelled={2:0.00} speed={3:0.00} reachedStack={4}",
                 flightTime, launcher.BounceCount, launcher.FlightDistance, launcher.Speed, reached));
             // Printed separately from FLIGHT because they are different quantities and the old log
             // conflated them: FLIGHT is how long the DIRECTOR waited, TimeToStack is when the puck
             // actually arrived. On the failing shot those were 2.403 s and about 3.5 s, and no line
             // in the log said so.
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] FLIGHT_END reason={0} waited={1:0.000}s timeToStack={2} bledOff={3} " +
                 "(budget {4:0.00}s, rest<= {5:0.00}u/s for {6:0.00}s, ceiling {7:0.00}s)",
                 flightEnd, flightTime,
@@ -543,7 +543,7 @@ namespace Case4
             bool payoutEarned = reached && coins.Armed && toppled > 0;
             if (!payoutEarned) coins.Disarm();
 
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] COIN_GATE stackHit={0} armed={1} toppledBlocks={2} -> payout={3}; contact={4} origin={5} originToContact={6:0.000}u",
                 reached, coins.Armed, toppled, payoutEarned,
                 launcher.ImpactPoint.ToString("0.###"), coinOrigin.ToString("0.###"),
@@ -621,13 +621,13 @@ namespace Case4
             Fire(JuiceEvent.Deform, string.Format(
                 "outcome moved={0} rotated={1} max={2:0.000} bounces={3}",
                 moved, rotated, shatter.MaxDisplacement(), launcher.BounceCount));
-            Debug.Log(string.Format("[Case4] PROOF impact -> end of settle = {0:0.00} s", SequenceTime - _impactTime));
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case4] PROOF impact -> end of settle = {0:0.00} s", SequenceTime - _impactTime));
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] PROOF stack: {0} blocks, {1} undisturbed (must be 0), formationSpread x{2:0.0} (informational - the old >=3.0 bar assumed a one-row-deep rest footprint and is unreachable in this layout), {3} rotated >12deg, fragments={4}, wholeForm={5}, maxDisplacement={6:0.00}, moved>{7:0.00}u={8} (informational)",
                 shatter.BlockCount, undisturbed, formationSpread, rotated,
                 shatter.FragmentCount, shatter.WholeFormCount, shatter.MaxDisplacement(),
                 shatter.blockSize * 0.5f, moved));
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 // Was one `travelled` number, read as flight distance, and it was not: _distance keeps
                 // accumulating through PostImpactGlide, which drives puck.position for a further
                 // 0.74 s and about 5 units after the shot is over. FLIGHT above and PROOF here
@@ -637,33 +637,33 @@ namespace Case4
                 launcher.BounceCount, launcher.FlightDistance,
                 launcher.TravelledDistance - launcher.FlightDistance, launcher.TravelledDistance,
                 launcher.StackHit, launcher.ImpactNormalSpeed));
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] PROOF coin stream: {0} coins launched on a {1:0.000} s stagger along one arc",
                 coins.LaunchedCount, coins.stagger));
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] PROOF coin exit: leavesFrame={0} at viewport ({1:0.000},{2:0.000}) " +
                 "[top-right quadrant = x>=0.5 and y>=0.5 -> {3}]; {4:0} px of the {5:0} px arc is on screen, " +
                 "neighbour gap {6:0.0} px (reference crossing (0.990,1.000), reference gap 63.6 px)",
                 coins.ExitsFrame, coins.ExitViewport.x, coins.ExitViewport.y,
                 coins.ExitsFrame && coins.ExitViewport.x >= 0.5f && coins.ExitViewport.y >= 0.5f ? "PASS" : "FAIL",
                 coins.OnScreenPathPx, coins.ScreenPathPx, coins.NeighbourGapPx));
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] PROOF coin origin: armedFromContact={0} contact={1} maxSpawnOffsetFromContact={2:0.000}u " +
                 "(spawn jitter radius {3:0.000}u), launchesRefusedWithoutContact={4}",
                 coins.Armed, coins.ContactPoint.ToString("0.###"), coins.WorstSpawnOffset,
                 shatter.blockPitch * 0.55f + 0.16f, coins.BlockedLaunchAttempts));
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] PROOF contactless payout: stackHit={0}, coins launched while un-armed = {1}",
                 launcher.StackHit, coins.Armed ? 0 : coins.LaunchedCount));
             string payoutWhy;
             bool payoutHeld = PayoutInvariantHolds(out payoutWhy);
-            Debug.Log("[Case4] PAYOUT_INVARIANT " + (payoutHeld ? "PASS " : "FAIL ") + payoutWhy);
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info("[Case4] PAYOUT_INVARIANT " + (payoutHeld ? "PASS " : "FAIL ") + payoutWhy);
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] PROOF arena rim: {0} flash CALLS, cyan active={1}, wired={2}" +
                 (wall != null && wall.IsWired ? "" : " -- NOTHING WAS DRAWN: the rim keeps its authored materials, so these are requests, not pixels"),
                 wall != null ? wall.FlashCount : 0, wall != null && wall.IsActive,
                 wall != null && wall.IsWired));
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case4] TIMING run={0:0.000} s over {1} frames ({2:0.0} fps), stalls>0.12s={3}, worst frame={4:0.000}s",
                 SequenceTime, Time.frameCount - _startFrame,
                 (Time.frameCount - _startFrame) / Mathf.Max(0.001f, SequenceTime),
@@ -758,7 +758,7 @@ namespace Case4
             {
                 _debrisSfxRefused++;
             }
-            Debug.Log(string.Format("[Case4] SFX_DEBRIS beat={0} earned={1} played={2} (played so far={3}, refused={4})",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case4] SFX_DEBRIS beat={0} earned={1} played={2} (played so far={3}, refused={4})",
                 beat, earned, earned, _debrisSfxPlayed, _debrisSfxRefused));
         }
 
@@ -834,7 +834,7 @@ namespace Case4
             if (repaired.Length > 0)
                 Debug.LogWarning("[Case4] RUNTIME_STATE_REPAIRED at=" + reason + " ->" + repaired);
             else
-                Debug.Log("[Case4] RUNTIME_STATE_OK at=" + reason + " blocks=" +
+                Shared.Sequencing.SeqLog.Info("[Case4] RUNTIME_STATE_OK at=" + reason + " blocks=" +
                           (shatter != null ? shatter.BlockCount : 0) +
                           " fixedDeltaTime=" + Time.fixedDeltaTime.ToString("0.0000"));
         }

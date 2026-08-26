@@ -567,6 +567,22 @@ namespace Case3
             c.counter.text = c.Collected + "/" + DenominatorFor(c);
             c.counter.enabled = c.Collected > 0;
 
+            // HEAVY WHITE ON A BLACK FRAME. The owner: "bu sayiyi da kalin beyaz siyah cerceveli yap".
+            //
+            // Written here rather than in Case3PageEntries, which is where the counter is authored.
+            // That editor pass stamps colour and outline into the scene, and a serialized value
+            // outranks an initialiser - editing the setup script alone would have changed nothing
+            // until someone re-ran it. Six other fields in this scene have taught that today, so this
+            // one is applied from the code that already runs every time the label is written.
+            //
+            // The old styling was dark red ink with a white outline, which read as a printed stamp.
+            // It has to survive on top of the card art at a glance, and white on black does that at
+            // any background lightness, where red-on-white loses to the darker sheets.
+            c.counter.color = Color.white;
+            c.counter.fontStyle = TMPro.FontStyles.Bold;
+            c.counter.outlineColor = Color.black;
+            c.counter.outlineWidth = 0.35f;   // 0.22 was a hairline at this font size
+
             // The counter is drawn ON TOP of everything on its card.
             //
             // It is authored as a child of the card, so it inherited the card's order (~600) while the
@@ -878,7 +894,7 @@ namespace Case3
             sb.AppendFormat("  VERDICT {0}", green ? "GREEN" : "RED");
             LastLandingGreen = green;
             LastLandingTrace = sb.ToString();
-            if (green) Debug.Log(LastLandingTrace); else Debug.LogError(LastLandingTrace);
+            if (green) Shared.Sequencing.SeqLog.Info(LastLandingTrace); else Debug.LogError(LastLandingTrace);
             _tracePeel = null;
         }
 
@@ -1078,7 +1094,7 @@ namespace Case3
             _current = index;
             _requested = index;
             _stickerTf = entries[index].sticker.transform;
-            Debug.Log("[Case3] SELECTED " + NameOf(index) + " (" + entries[index].sticker.name + ")" +
+            Shared.Sequencing.SeqLog.Info("[Case3] SELECTED " + NameOf(index) + " (" + entries[index].sticker.name + ")" +
                       " -> card=" + entries[index].key + " " + (StackCount(entries[index].key) + 1) +
                       "/" + stackRequirement);
             _pressDriven = true;
@@ -1122,7 +1138,7 @@ namespace Case3
             IEnumerator warm = Prewarm();
             while (warm.MoveNext()) { }
             Ready = true;
-            Debug.Log("[Case3] prewarm finished; scene is idle and waiting for a tap (" + Count + " stickers)");
+            Shared.Sequencing.SeqLog.Info("[Case3] prewarm finished; scene is idle and waiting for a tap (" + Count + " stickers)");
             yield return base.Start();
         }
 
@@ -1203,7 +1219,7 @@ namespace Case3
             cur.sticker.sortingOrder = Mathf.Max(cur.HomeSortingOrder, CarrySortingOrder());
             peel.Prepare();
 
-            Debug.Log(string.Format("[Case3] RUN_BEGIN item={0} ({1}) -> card={2} slot={3}",
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case3] RUN_BEGIN item={0} ({1}) -> card={2} slot={3}",
                 NameOf(_current), cur.sticker.name, cur.key, targetSlot.name));
 
             _t0 = SequenceClock;
@@ -1601,13 +1617,13 @@ namespace Case3
             RecomputeCoverage();
             EndStep();
 
-            Debug.Log(string.Format(
+            Shared.Sequencing.SeqLog.Info(string.Format(
                 "[Case3] PROOF peel start -> attach = {0:0.000} s (visual target ~0.8-1.1 s); " +
                 "run = {1:0.000} s over {2} frames ({3:0.0} fps); sparkle bursts = {4}",
                 attachTime - tapDuration, SequenceTime, Time.frameCount - _startFrame,
                 (Time.frameCount - _startFrame) / Mathf.Max(0.001f, SequenceTime),
                 flight != null ? flight.EmittedCount : 0));
-            Debug.Log(string.Format("[Case3] RUN_END {0} (sprite '{1}') landed on the {2} card at {3}/{4}; " +
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case3] RUN_END {0} (sprite '{1}') landed on the {2} card at {3}/{4}; " +
                                     "the card now draws sprite '{5}'; {6} item(s) still tappable",
                 NameOf(_current), cur.sticker != null && cur.sticker.sprite != null ? cur.sticker.sprite.name : "?",
                 cur.key, StackCount(cur.key), stackRequirement,
@@ -1770,7 +1786,7 @@ namespace Case3
             int index = PickSticker(screen);
             if (index < 0)
             {
-                Debug.Log("[Case3] press at " + screen + " hit no playable sticker; ignored");
+                Shared.Sequencing.SeqLog.Info("[Case3] press at " + screen + " hit no playable sticker; ignored");
                 return;
             }
 
