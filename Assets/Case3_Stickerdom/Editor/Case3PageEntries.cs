@@ -448,8 +448,16 @@ public static class Case3PageEntries
         // The counter is printed over the art rather than into an empty band, so it has to stay
         // legible on top of it. White on a black frame does that at any background lightness; the
         // dark red it used to be lost contrast on the darker sheets.
-        tmp.outlineColor = Color.black;
-        tmp.outlineWidth = 0.35f;
+        //
+        // The keyword is what actually draws it. outlineWidth alone is written and then ignored,
+        // because the outline is a shader feature gated behind OUTLINE_ON - the reason the first
+        // attempt produced no frame. fontMaterial, not fontSharedMaterial: shared would turn the
+        // outline on for every TextMeshPro in the project using this font.
+        Material counterMat = tmp.fontMaterial;
+        counterMat.EnableKeyword("OUTLINE_ON");
+        counterMat.SetColor(TMPro.ShaderUtilities.ID_OutlineColor, Color.black);
+        counterMat.SetFloat(TMPro.ShaderUtilities.ID_OutlineWidth, 0.28f);
+        tmp.UpdateMeshPadding();
         tmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
         tmp.raycastTarget = false;
         tmp.enabled = false;                     // nothing collected yet

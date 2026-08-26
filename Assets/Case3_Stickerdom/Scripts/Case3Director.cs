@@ -557,6 +557,42 @@ namespace Case3
             RefreshStackLabel(c);
         }
 
+        /// <summary>
+        /// Heavy white digits inside a black frame. The owner: "yaziya siyah cerceve ver ki belirgin
+        /// olsun".
+        ///
+        /// Setting TMP_Text.outlineWidth and outlineColor is NOT enough on its own, and that is why
+        /// the first attempt drew no frame at all: the outline is a shader feature gated behind the
+        /// OUTLINE_ON keyword, and on a font material that has never had it enabled the width is
+        /// written and then ignored. The keyword has to be turned on explicitly.
+        ///
+        /// It goes through .fontMaterial, not .fontSharedMaterial. Shared would enable the outline on
+        /// every TextMeshPro in the project that uses this font - the replay button and the menu
+        /// included. fontMaterial makes a per-label instance, which is what a per-label style needs.
+        ///
+        /// Applied once per label. Touching fontMaterial allocates the instance on first access, so
+        /// calling this every time the counter is rewritten would be a needless allocation per pickup.
+        /// </summary>
+        void StyleCounter(TMPro.TextMeshPro tmp)
+        {
+            if (tmp == null || !_styledCounters.Add(tmp.GetInstanceID())) return;
+
+            tmp.color = Color.white;
+            tmp.fontStyle = TMPro.FontStyles.Bold;
+
+            Material m = tmp.fontMaterial;
+            m.EnableKeyword("OUTLINE_ON");
+            m.SetColor(TMPro.ShaderUtilities.ID_OutlineColor, Color.black);
+            m.SetFloat(TMPro.ShaderUtilities.ID_OutlineWidth, 0.28f);
+            tmp.UpdateMeshPadding();      // the glyph rects have to grow or the frame is clipped off
+
+            Shared.Sequencing.SeqLog.Info(string.Format("[Case3] COUNTER_STYLE {0}: white + black outline {1:0.00}",
+                                      tmp.name, m.GetFloat(TMPro.ShaderUtilities.ID_OutlineWidth)));
+        }
+
+        readonly System.Collections.Generic.HashSet<int> _styledCounters =
+            new System.Collections.Generic.HashSet<int>();
+
         /// <summary>Writes "n/5" onto a card, and hides the label until the card holds something.</summary>
         void RefreshStackLabel(StackCard c)
         {
@@ -567,21 +603,7 @@ namespace Case3
             c.counter.text = c.Collected + "/" + DenominatorFor(c);
             c.counter.enabled = c.Collected > 0;
 
-            // HEAVY WHITE ON A BLACK FRAME. The owner: "bu sayiyi da kalin beyaz siyah cerceveli yap".
-            //
-            // Written here rather than in Case3PageEntries, which is where the counter is authored.
-            // That editor pass stamps colour and outline into the scene, and a serialized value
-            // outranks an initialiser - editing the setup script alone would have changed nothing
-            // until someone re-ran it. Six other fields in this scene have taught that today, so this
-            // one is applied from the code that already runs every time the label is written.
-            //
-            // The old styling was dark red ink with a white outline, which read as a printed stamp.
-            // It has to survive on top of the card art at a glance, and white on black does that at
-            // any background lightness, where red-on-white loses to the darker sheets.
-            c.counter.color = Color.white;
-            c.counter.fontStyle = TMPro.FontStyles.Bold;
-            c.counter.outlineColor = Color.black;
-            c.counter.outlineWidth = 0.35f;   // 0.22 was a hairline at this font size
+            StyleCounter(c.counter);
 
             // The counter is drawn ON TOP of everything on its card.
             //
