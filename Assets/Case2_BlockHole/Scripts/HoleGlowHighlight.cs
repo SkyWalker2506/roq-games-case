@@ -621,17 +621,21 @@ namespace Case2
         /// <summary>
         /// Clip height for a tile IN FLIGHT.
         ///
-        /// -0.27, a quarter of a unit under the tray floor. It was -0.9, which needed the bottom
-        /// frame rail deepened to cover it - and that rail then intersected the bottom-row hole and
-        /// filled its cavity with a flat dark slab. Solving one edge case by growing geometry into
-        /// another one is not solving it.
+        /// The same as the tray floor, i.e. no extra depth in flight - and that is the answer, not
+        /// a retreat from one.
         ///
-        /// A quarter unit is enough for the tile to be seen crossing out of the opening, and at this
-        /// camera - orthographic, 80 degrees - it projects to about five screen pixels below the
-        /// front edge, so no rail has to grow at all. The 2-unit climb above the plane is untouched;
-        /// that is where the motion reads anyway.
+        /// Every value below the floor leaks, and not only at the bottom edge: the side rails span
+        /// -0.02 to +0.06 as well, so -0.9 showed under the bottom, -0.27 showed under all four, and
+        /// each fix was chasing the same hole around the board. Measured: tiles occupy x 0..7 and
+        /// z 0..8, the rails sit exactly on those lines, so a tile drawn below the floor anywhere on
+        /// the border has nothing in front of it.
+        ///
+        /// Clipping at the floor loses nothing that reads. The motion is the 2-unit climb ABOVE the
+        /// plane, and with a 3-deep tile that climb is a wall growing out of the board - which is
+        /// the depth that was wanted. What is given up is watching the tile inside the pit, which
+        /// was never visible in the shipped look anyway.
         /// </summary>
-        public const float FlightClipY = -0.27f;
+        public const float FlightClipY = TrayFloorY;
 
         void SetTileVisible(int i, bool visible)
         {
