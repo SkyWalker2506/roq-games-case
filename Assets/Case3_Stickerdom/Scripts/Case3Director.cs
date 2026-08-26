@@ -552,6 +552,21 @@ namespace Case3
             return Mathf.Max(1, c != null && c.requirement > 0 ? c.requirement : stackRequirement);
         }
 
+        /// <summary>
+        /// Where the drawn sheet's centre has to be so that its stuck edge stays on
+        /// <paramref name="anchor"/>, easing onto <paramref name="rest"/> by the end of the unroll.
+        ///
+        /// The correction is what the edge has drifted this frame; blending it out over the unroll
+        /// means the sheet finishes exactly on its authored resting centre instead of wherever the
+        /// arithmetic left it.
+        /// </summary>
+        static Vector3 PeelDrawnCentre(StickerPeel peel, Vector3 anchor, Vector3 edgeNow, Vector3 rest, float e)
+        {
+            Vector3 centreNow = peel.VisualWorldCentre(9);
+            Vector3 held = centreNow + (anchor - edgeNow);      // edge pinned exactly
+            return Vector3.Lerp(held, rest, e * e);             // and settled onto rest by the end
+        }
+
         /// <summary>The deepest any pile on any card can get, so the counter can clear all of them.</summary>
         int MaxRequirement()
         {
@@ -1154,6 +1169,10 @@ namespace Case3
 
             bool secondPeelLayer = false;
 
+            // Where the PAPER is before it curls. At progress 0 the mesh offset is zero, so this is
+            // the sheet's own visual home - and pinning to it is what makes the peel happen IN PLACE.
+            Vector3 drawnHome = peel.VisualWorldCentre(9);
+
             while (SequenceClock < _t0 + tPeel)
             {
                 float k = Mathf.Clamp01((SequenceClock - _t0 - tTap) / Mathf.Max(0.0001f, peelDuration));
@@ -1163,7 +1182,15 @@ namespace Case3
                 float e = Ease.Evaluate(EaseType.OutCubic, k);
 
                 peel.SetProgress(e * peelEnd);
-                _stickerTf.position = homePosition + new Vector3(0f, peelLift * e, -0.05f * e);
+                // Pin the DRAWN sheet, not the transform.
+                //
+                // Writing the transform leaves the paper free to slide: StickerPeel's centroid
+                // compensation moves the drawn mesh away from its own transform as the curl grows,
+                // by as much as 3.23 world units on the cat. So the transform sat still and the paper
+                // wandered off - the owner: "oldugu yerde boyle sokulmuyor, random bir yere giderek
+                // aciliyor". Pinning the drawn centre unwinds the compensation every frame, so the
+                // sheet peels exactly where it lies and only the authored lift moves it.
+                PlaceDrawnAt(peel, drawnHome + new Vector3(0f, peelLift * e, -0.05f * e));
 
                 // Two-layer rule from .plan-build/audio.md: main hit, second accent 0.10-0.14 s later.
                 if (!secondPeelLayer && SequenceClock - _t0 >= tTap + 0.10f)
@@ -1175,14 +1202,11 @@ namespace Case3
             }
 
             peel.SetProgress(peelEnd);
-            Vector3 launchPos = homePosition + new Vector3(0f, peelLift, -0.05f);
-            _stickerTf.position = launchPos;
-            // The flight is authored in DRAWN space, and it starts wherever the curled paper actually
-            // is - measured, not assumed. Starting it at the transform instead would put a jump the
-            // size of the curl offset on the first frame of the flight, which is the same bug at the
-            // other end of the arc.
-            Vector3 drawnLaunch = peel.VisualWorldCentre(9);
-            drawnLaunch.z = launchPos.z;
+            // The flight starts from exactly where the peel left the PAPER, which is now a known
+            // point rather than a measured one: the peel pinned it there every frame. Measuring it
+            // again would only reintroduce the risk of the two disagreeing by a frame.
+            Vector3 drawnLaunch = drawnHome + new Vector3(0f, peelLift, -0.05f);
+            PlaceDrawnAt(peel, drawnLaunch);
 
             // PEEL COMPLETION IS THE PROMOTION INSTANT. In the reference the jar is uncovered at
             // t=4.11 and is a fully collectible sticker from that frame on - it is tapped and
@@ -1256,6 +1280,10 @@ namespace Case3
             // the card as the sheet flattens. A placed sticker is printed onto the page and casts nothing.
             peel.MarkPlaced();
 
+            // The edge that will stay put for the whole unroll, taken while the sheet is still fully
+            // curled and already sitting at its card.
+            Vector3 edgeAnchor = peel.AnchoredEdgeWorld();
+
             while (SequenceClock < _t0 + tFlip)
             {
                 float k = Mathf.Clamp01((SequenceClock - _t0 - tFlight) / Mathf.Max(0.0001f, flipDuration));
@@ -1271,7 +1299,11 @@ namespace Case3
                 // flattens, and holding the transform still while that happens is precisely what used
                 // to drag the drawn sheet 1.18 u across the album in 27 ms. Pinning the DRAWN centre
                 // instead lets the paper unwind in place, which is what the reference does.
-                PlaceDrawnAt(peel, restCentre);
+                // Hold the STUCK EDGE, not the centre. Pinning the centre is what made the sheet
+                // turn about itself - paper does not do that. One edge holds, the rest opens out from
+                // it, and the centre travels the half-length it gains as the roll flattens.
+                Vector3 edgeNow = peel.AnchoredEdgeWorld();
+                PlaceDrawnAt(peel, PeelDrawnCentre(peel, edgeAnchor, edgeNow, restCentre, e));
                 TraceMark("flip");
                 yield return null;
             }

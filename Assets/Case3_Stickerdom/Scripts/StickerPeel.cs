@@ -497,6 +497,7 @@ namespace Case3
             if (shadow != null)
             {
                 _placed = !on;                  // placed == the paper has left the page for good
+                _shadowSuppressed = !on;
                 if (!on) { shadow.enabled = false; }
                 else     { _shadowResolved = false; _paperShadow = null; ApplyPaperShadow(); }
             }
@@ -521,6 +522,7 @@ namespace Case3
         /// <summary>Puts the sticker back to a flat sprite; the mesh object is kept for the next run.</summary>
         public void ResetInstant()
         {
+            _shadowSuppressed = false;
             _alpha = 1f;
             _placed = false;
             _hasOrigin = false;
@@ -545,10 +547,22 @@ namespace Case3
         /// whole idle phase before the corner lifts, and switching the shadow off there would strip the
         /// resting stickers of their shadow for the entire wait.
         /// </summary>
+        /// <summary>
+        /// Set once the sheet has been picked, cleared only by <see cref="ResetInstant"/>.
+        ///
+        /// Killing the shadow at one call site was not enough - five separate paths call
+        /// ApplyPaperShadow, and any one of them running after the sheet had left the page brought
+        /// the shadow back. The owner saw it return twice. A latch is the honest fix: once the paper
+        /// is off the page there is no state in which a contact shadow is correct, so no caller
+        /// should be able to argue otherwise.
+        /// </summary>
+        bool _shadowSuppressed;
+
         void ApplyPaperShadow()
         {
             SpriteRenderer sr = PaperShadow();
             if (sr == null) return;
+            if (_shadowSuppressed) { sr.enabled = false; return; }
 
             float k = _placed ? 1f : Mathf.Clamp01(_progress / ShadowFadeProgress);
             float a = _shadowHomeColor.a * (1f - k);
@@ -601,6 +615,7 @@ namespace Case3
         public void MarkPlaced()
         {
             _placed = true;
+            _shadowSuppressed = true;
             ApplyPaperShadow();
         }
 
@@ -663,6 +678,25 @@ namespace Case3
         /// World-space AABB of the sticker while it is FLAT: the sprite rect through the sticker's own
         /// transform. This is the silhouette the curl is not allowed to grow far beyond.
         /// </summary>
+        /// <summary>
+        /// World point of the edge the curl is rolling AWAY from - the one that stays stuck.
+        ///
+        /// A sticker does not unroll by spinning about its own centre; one edge holds and the sheet
+        /// opens out from it. Pinning the CENTRE during the unroll is exactly what made ours turn in
+        /// place - the owner: "olacagi yerde ters donuyor gibi olmayacak, bir ucu sabit kalacak".
+        /// Pin this instead and the fold behaves like paper.
+        /// </summary>
+        public Vector3 AnchoredEdgeWorld(int samples = 33)
+        {
+            Bounds b = CurlWorldBounds(samples);
+            Vector2 d = ResolveDirection();
+            Vector3 dir = new Vector3(d.x, d.y, 0f);
+            if (dir.sqrMagnitude < 1e-6f) dir = Vector3.right; else dir.Normalize();
+            // The fold travels along +dir, so the edge that stays put is the one at -dir.
+            float half = Mathf.Abs(dir.x) * b.extents.x + Mathf.Abs(dir.y) * b.extents.y;
+            return b.center - dir * half;
+        }
+
         public Bounds FlatWorldBounds()
         {
             if (!_built) Prepare();
