@@ -1163,7 +1163,14 @@ namespace Case3
 
             Vector3 homePosition = cur.HomePosition;
             Vector3 homeScale = cur.HomeScale;
-            Vector3 slotScale = targetSlot.transform.localScale;
+            // THE STICKER DOES NOT CHANGE SIZE. The owner: "target'taki boyutu kucululuyor,
+            // kuculmesin - baslangictaki boyutu neyse target'i da o sekilde yapissin."
+            //
+            // The slot's own localScale used to decide the landed size, so a sheet was one size on
+            // the page and a smaller one on the card, and the shrink happened during the flight where
+            // it reads as the sticker receding rather than travelling. The ghost slot is a layout
+            // marker; it says WHERE, not how big.
+            Vector3 slotScale = homeScale;
 
             // ONE resting place, decided HERE, before anything moves, and never touched again.
             // The fan offset for a stacked sheet is part of it - not something applied after the sheet
