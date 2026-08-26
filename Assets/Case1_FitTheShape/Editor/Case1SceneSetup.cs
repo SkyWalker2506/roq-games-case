@@ -1666,10 +1666,10 @@ public static class Case1SceneSetup
         // however the profile is shaped there is nowhere for a curve to appear - the reference's
         // sockets bend into the hole over a visible width. See the monotonic outer ramp in
         // SoftPlastic.shader, which is the other half of this.
-        m.SetFloat("_IndentBevel", 0.095f);
+        m.SetFloat("_IndentBevel", 0.05f);
         m.SetFloat("_IndentCornerSink", 0.9f);
-        m.SetFloat("_IndentCreaseAO", 0.55f);
-        m.SetFloat("_IndentLipStrength", 1.7f);
+        m.SetFloat("_IndentCreaseAO", 0.28f);
+        m.SetFloat("_IndentLipStrength", 0.75f);
         // USER: "derinligi artir genel olarak". Every INTENSIVE depth ratio was already at or past
         // the reference - floor/face 0.068-0.178 against its 0.067-0.152, intra-socket contrast
         // 0.54-0.85 against its 0.51-0.76, top-to-bottom gradient +0.42 to +0.77 against its +0.16
@@ -1717,7 +1717,7 @@ public static class Case1SceneSetup
         bool hasSocket = shapeId != (ShapeId)0 && !glyph && !plate && !path.Contains("Case1_Playable_");
         m.SetFloat("_IndentWall", hasSocket ? 0.185f : 0f);
         m.SetFloat("_CavityCrease", hasSocket ? 0.57f : 0f);
-        m.SetFloat("_IndentFloorDarken", 0.364f);
+        m.SetFloat("_IndentFloorDarken", 0.74f);
 
         // ---- socket cavity: CODE OWNS ALL FOUR, deliberately ----
         // These four used to live only in the .mat assets (_CavityBounce 10.2, _CavityLightKill 0.7)

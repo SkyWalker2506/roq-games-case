@@ -31,12 +31,12 @@ Material:
     - _Cull: 2
     - _EdgeInk: 0.25
     - _EdgeInkWidth: 2
-    - _IndentLipStrength: 1.7
-    - _IndentCreaseAO: 0.55
+    - _IndentLipStrength: 0.75
+    - _IndentCreaseAO: 0.28
     - _IndentCornerSink: 0.9
-    - _IndentBevel: 0.08
+    - _IndentBevel: 0.05
     - _IndentDepth: 0.22
-    - _IndentFloorDarken: 0.52
+    - _IndentFloorDarken: 0.74
     - _IndentInnerShadow: 0.58
     - _IndentScale: 1
     - _OffsetFactor: 0

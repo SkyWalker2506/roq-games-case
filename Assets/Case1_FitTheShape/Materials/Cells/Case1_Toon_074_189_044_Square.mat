@@ -38,12 +38,12 @@ Material:
     - _CurveDarken: 0
     - _EdgeInk: 0.25
     - _EdgeInkWidth: 3
-    - _IndentLipStrength: 1.7
-    - _IndentCreaseAO: 0.55
+    - _IndentLipStrength: 0.75
+    - _IndentCreaseAO: 0.28
     - _IndentCornerSink: 0.9
-    - _IndentBevel: 0.095
+    - _IndentBevel: 0.05
     - _IndentDepth: 0.18
-    - _IndentFloorDarken: 0.364
+    - _IndentFloorDarken: 0.74
     - _IndentInnerShadow: 0.68
     - _IndentScale: 1.28
     - _IndentWall: 0.185
