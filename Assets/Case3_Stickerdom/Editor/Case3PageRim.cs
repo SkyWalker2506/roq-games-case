@@ -42,7 +42,7 @@ namespace Case3.EditorTools
         /// Removes any authored contact-shadow child, however many previous runs left behind and
         /// whichever of the two names they ended up under.
         /// </summary>
-        static void PurgeShadowChildren(GameObject obj)
+        static void PurgeShadowChildren(Component obj)
         {
             if (obj == null) return;
             for (int i = obj.transform.childCount - 1; i >= 0; i--)
