@@ -203,18 +203,25 @@ public static class Case3SelectionGate
                 }
                 else
                 {
-                    // Finding 1, structurally: the contact shadow reads full while the sheet rests on the
-                    // page and must read zero once it is placed. Checked as a pair, so an accessor that
-                    // always answered 0 would already have failed the at-rest check above.
+                    // Finding 1, structurally: no shadow sprite may have come back. Counting children
+                    // rather than reading an alpha, for the reason CheckRestingShadows spells out - an
+                    // alpha read off one cached renderer stayed 0.000 while five siblings drew.
                     Case3Director.Entry done = director.entries[_index];
-                    if (done != null && done.peel != null && done.peel.PaperShadowAlpha > 0.001f)
+                    if (done != null && done.sticker != null)
                     {
-                        Fail(_index, done.sticker.name,
-                             "the paper contact shadow is still drawing at alpha " +
-                             done.peel.PaperShadowAlpha.ToString("0.000") + " after the sheet was placed");
-                        _index++;
-                        _phase = 1;
-                        break;
+                        int n = 0;
+                        Transform st = done.sticker.transform;
+                        for (int c = 0; c < st.childCount; c++)
+                            if (st.GetChild(c).name.StartsWith(Case3.StickerPeel.PaperShadowPrefix,
+                                                               System.StringComparison.Ordinal)) n++;
+                        if (n > 0)
+                        {
+                            Fail(_index, done.sticker.name,
+                                 "regrew " + n + " contact-shadow sprite(s) after the sheet was placed");
+                            _index++;
+                            _phase = 1;
+                            break;
+                        }
                     }
 
                     _passed++;
@@ -234,11 +241,17 @@ public static class Case3SelectionGate
     // ------------------------------------------------------------------ Finding 1: contact shadow
 
     /// <summary>
-    /// Positive control for the shadow instrument: at rest, every playable sticker must be casting its
-    /// contact shadow. Without this the "shadow is gone after placement" check could pass on a sticker
-    /// that never had a shadow child at all - which is exactly how the shadow bug survived: the code
-    /// looked for a child named "PaperShadow", the scene calls it "Shadow_Cat", and the lookup failed
-    /// silently on every single sticker.
+    /// No peelable sheet may own a contact-shadow SPRITE.
+    ///
+    /// This check used to assert the opposite - that every sticker HAD one - as a positive control for
+    /// an alpha reading. The design changed: a flat quad cannot follow a curling sheet, so the shadow
+    /// is drawn by the curl shader and the sprites are destroyed on Prepare.
+    ///
+    /// Counting the children is the honest instrument, and the old one could never have caught what
+    /// actually went wrong. StickerPeel cached the FIRST "Shadow_*" child and hid it; the scene had
+    /// accumulated SIX per sheet, 59 in all, and the other five kept drawing at their page position
+    /// while the paper curled away. An alpha read off the one cached renderer said 0.000 and looked
+    /// clean the whole time.
     /// </summary>
     static void CheckRestingShadows(Case3Director director)
     {
@@ -246,13 +259,20 @@ public static class Case3SelectionGate
         {
             Case3Director.Entry e = director.entries[i];
             if (e == null || e.peel == null || e.sticker == null) continue;
-            float a = e.peel.PaperShadowAlpha;
-            if (a <= 0.001f)
-                Fail(i, e.sticker.name, "has no paper contact shadow at rest (alpha " + a.ToString("0.000") +
-                                        "); the shadow checks after placement would be vacuous");
+
+            int n = 0;
+            Transform st = e.sticker.transform;
+            for (int c = 0; c < st.childCount; c++)
+                if (st.GetChild(c).name.StartsWith(Case3.StickerPeel.PaperShadowPrefix,
+                                                   System.StringComparison.Ordinal)) n++;
+
+            if (n > 0)
+                Fail(i, e.sticker.name, "still owns " + n + " '" +
+                                        Case3.StickerPeel.PaperShadowPrefix +
+                                        "*' shadow sprite(s); a quad cannot follow a curling sheet and " +
+                                        "these are what leave a grey blob on the page");
             else
-                Debug.Log(string.Format("[Case3Gate] SHADOW_AT_REST {0} sticker={1} alpha={2:0.000}",
-                                        i, e.sticker.name, a));
+                Debug.Log(string.Format("[Case3Gate] NO_SHADOW_SPRITE {0} sticker={1}", i, e.sticker.name));
         }
     }
 

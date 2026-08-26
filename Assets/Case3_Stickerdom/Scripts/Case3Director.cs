@@ -479,6 +479,29 @@ namespace Case3
             return top;
         }
 
+        /// <summary>
+        /// The highest sorting order anything in the sequence is currently drawn at.
+        ///
+        /// Deliberately a live scan rather than a remembered number: the entries' orders are rewritten
+        /// as they are peeled and landed, so a constant computed at Start is wrong by the second run.
+        /// </summary>
+        int TopSortingOrder()
+        {
+            int top = CarrySortingOrder();
+            if (entries != null)
+                for (int i = 0; i < entries.Length; i++)
+                {
+                    Entry e = entries[i];
+                    if (e == null) continue;
+                    if (e.sticker != null && e.sticker.sortingOrder > top) top = e.sticker.sortingOrder;
+                    if (e.peel != null && e.peel.companions != null)
+                        for (int c = 0; c < e.peel.companions.Length; c++)
+                            if (e.peel.companions[c] != null && e.peel.companions[c].sortingOrder > top)
+                                top = e.peel.companions[c].sortingOrder;
+                }
+            return top;
+        }
+
         /// <summary>How many of a kind have been collected onto its card so far.</summary>
         public int StackCount(string key)
         {
@@ -1192,7 +1215,15 @@ namespace Case3
             //
             // Fifth sorting bug of this shape today, and the same fix: derive the order at the moment
             // it is needed instead of leaving the one that was right when the sheet was lying flat.
-            cur.sticker.sortingOrder = CarrySortingOrder();
+            // CarrySortingOrder only looks at the CARDS. That was enough while nothing else had been
+            // raised, but every sticker that lands keeps its carry order for good, so by the second
+            // peel the page already holds sheets and die-cut rims at the same number this one is
+            // about to claim - and a tie is resolved by whatever Unity feels like, which is how the
+            // owner ends up seeing another item's white rim lying across the sheet being peeled
+            // ("baska objelerin hatti kaliyor, en ustte olmasi lazim").
+            //
+            // Sixth of these today. Same fix as the other five: ask the scene what the top is now.
+            cur.sticker.sortingOrder = TopSortingOrder() + 1;
             peel.SyncMeshSorting();
 
             while (SequenceClock < _t0 + tPeel)
@@ -1204,15 +1235,16 @@ namespace Case3
                 float e = Ease.Evaluate(EaseType.OutCubic, k);
 
                 peel.SetProgress(e * peelEnd);
-                // THE OBJECT'S CENTRE DOES NOT MOVE. Not the drawn centre, not the curl's bounds,
-                // not the hinge - the sheet's own transform, which is what "the object's centre"
-                // means and what the card will later be asked to match.
+                // THE OBJECT'S CENTRE DOES NOT MOVE - and the centre that counts is the DRAWN one.
                 //
-                // Every previous attempt pinned something derived from the CURL, and every one of them
-                // moved, because everything about the curl grows as it rolls. With the centroid
-                // compensation off there is nothing left to cancel: the sheet stays put and the fold
-                // just deforms the drawing around it.
-                _stickerTf.position = homePosition + new Vector3(0f, peelLift * e, -0.05f * e);
+                // Holding the transform is not the same thing. At full peel the flap is mirrored about
+                // the fold line, so the drawing reaches well past the footprint it started in and the
+                // sheet visibly walks away from where it was lying: "tamamen acinca yine ana objeden
+                // uzaklasiyor bayagi". The transform never moved; the paper did.
+                //
+                // Pinning the drawn centre makes all three phases hold the same point - peel, flight
+                // and flip - which is also why the phase boundaries no longer jump.
+                PlaceDrawnAt(peel, drawnHome + new Vector3(0f, peelLift * e, -0.05f * e));
 
                 // Two-layer rule from .plan-build/audio.md: main hit, second accent 0.10-0.14 s later.
                 if (!secondPeelLayer && SequenceClock - _t0 >= tTap + 0.10f)
@@ -1224,9 +1256,9 @@ namespace Case3
             }
 
             peel.SetProgress(peelEnd);
-            // The peel held the sheet's transform still, so the pose at the end of it is known.
+            // Same rule as the loop above: place the PAPER, then read where that left the transform.
             Vector3 endLift = new Vector3(0f, peelLift, -0.05f);
-            _stickerTf.position = homePosition + endLift;
+            PlaceDrawnAt(peel, drawnHome + endLift);
             // The flight interpolates between two DRAWN positions - it ends with
             // PlaceDrawnAt(peel, restCentre) - so its start has to be a drawn position too. Handing it
             // the transform made the first flight frame snap by the curl offset, because frame 0

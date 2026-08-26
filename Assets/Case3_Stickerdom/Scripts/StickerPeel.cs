@@ -576,18 +576,13 @@ namespace Case3
         /// </summary>
         public void SetPageDressingEnabled(bool on)
         {
-            // The contact shadow FIRST, and directly. It is not in `companions` - only the rim is -
-            // it is found by prefix through PaperShadow(). So the loop below skipped the rim by
-            // design and then had nothing left to touch, which meant this method did nothing at all
-            // and every consumed sticker left its grey shadow lying on the page.
-            SpriteRenderer shadow = PaperShadow();
-            if (shadow != null)
-            {
-                _placed = !on;                  // placed == the paper has left the page for good
-                _shadowSuppressed = !on;
-                if (!on) { shadow.enabled = false; }
-                else     { _shadowResolved = false; _paperShadow = null; ApplyPaperShadow(); }
-            }
+            // The contact shadow is not in `companions` - only the rim is - so the loop below could
+            // never have touched it. It is not switched off either: it is gone, destroyed on the
+            // first Prepare, because the scene had accumulated six copies of it per sheet and only
+            // one of them was ever being found.
+            _placed = !on;                      // placed == the paper has left the page for good
+            _shadowSuppressed = !on;
+            DestroyPaperShadows();
 
             if (companions == null) return;
             for (int i = 0; i < companions.Length; i++)
@@ -647,31 +642,46 @@ namespace Case3
 
         void ApplyPaperShadow()
         {
-            SpriteRenderer sr = PaperShadow();
-            if (sr == null) return;
-
-            // The contact shadow is a separate SPRITE laid under the sheet, and the owner does not want
-            // one: "golge sanirim bu karanlik olsun diye katman koyuyorsun o - oyle yapma, direk shader
-            // ile karart". A quad cannot follow a curling sheet, so it reads as a grey blob sitting
-            // beside the paper rather than as shading on it. The curl shader already darkens the fold
-            // (_ShadowStrength, _ShadeFloor, _BackAO) and now does it much harder.
-            //
-            // Kept as a component rather than deleted so the scene's wiring stays valid; it simply
-            // never draws.
-            sr.enabled = false;
-            return;
-#pragma warning disable 0162
-            if (_shadowSuppressed) { sr.enabled = false; return; }
-
-            float k = _placed ? 1f : Mathf.Clamp01(_progress / ShadowFadeProgress);
-            float a = _shadowHomeColor.a * (1f - k);
-
-            sr.enabled = a > 0.001f;
-            Color c = _shadowHomeColor;
-            c.a = a;
-            sr.color = c;
-#pragma warning restore 0162
+            DestroyPaperShadows();
         }
+
+        /// <summary>
+        /// Removes the contact-shadow SPRITES under this sheet, permanently.
+        ///
+        /// Disabling them was not enough and the hierarchy says why: PageObj_ramen_cup carries SIX
+        /// children called Shadow_PageObj_ramen_cup, and <see cref="PaperShadow"/> cached the FIRST
+        /// match and returned. One was switched off; the other five kept drawing, kept their page
+        /// position while the sheet curled away, and left the grey blob the owner is pointing at -
+        /// "hala golge farkli bir objeyle yapiliyor, o kalkmasi lazim".
+        ///
+        /// So: no lookup, no caching, no enabled flag. Every "Shadow_*" child of a PEELABLE sheet is
+        /// destroyed the first time that sheet is prepared, whatever the scene was left holding. Page
+        /// dressing that has no StickerPeel keeps its own authored shadow; this only ever touches the
+        /// sheets that curl, which are exactly the ones a flat quad cannot follow.
+        ///
+        /// The darkening lives in the shader (_ShadowStrength, _ShadeFloor, _BackAO), which is what
+        /// the owner asked for: "oyle yapma, direk shader ile karart".
+        /// </summary>
+        void DestroyPaperShadows()
+        {
+            if (sticker == null || _shadowsPurged) return;
+            _shadowsPurged = true;
+
+            Transform st = sticker.transform;
+            for (int i = st.childCount - 1; i >= 0; i--)
+            {
+                Transform c = st.GetChild(i);
+                if (!c.name.StartsWith(PaperShadowPrefix, System.StringComparison.Ordinal)) continue;
+                if (Application.isPlaying) Destroy(c.gameObject);
+                else                       DestroyImmediate(c.gameObject);
+            }
+            _paperShadow = null;
+            _shadowResolved = true;
+        }
+
+        /// <summary>True once <see cref="DestroyPaperShadows"/> has swept this sheet.</summary>
+        bool _shadowsPurged;
+
 
         /// <summary>
         /// Where the sheet actually READS on screen, in world x/y.
@@ -719,37 +729,6 @@ namespace Case3
             ApplyPaperShadow();
         }
 
-        /// <summary>
-        /// The drop-shadow child, resolved once and cached. <see cref="Case3SceneSetup"/> names it
-        /// "Shadow_" + the sticker's key ("Shadow_Cat"), so it is found by prefix, not by a fixed name:
-        /// a fixed name is exactly what silently broke this - Find("PaperShadow") returned null for
-        /// every sticker in the scene and the shadow was never hidden at all. If no such child exists the
-        /// failure is now LOUD, once, instead of a silent early return.
-        /// </summary>
-        SpriteRenderer PaperShadow()
-        {
-            if (_shadowResolved) return _paperShadow;
-            _shadowResolved = true;
-            if (sticker == null) return null;
-
-            Transform st = sticker.transform;
-            for (int i = 0; i < st.childCount; i++)
-            {
-                Transform c = st.GetChild(i);
-                if (!c.name.StartsWith(PaperShadowPrefix, System.StringComparison.Ordinal)) continue;
-                SpriteRenderer sr = c.GetComponent<SpriteRenderer>();
-                if (sr == null) continue;
-                _paperShadow = sr;
-                _shadowHomeColor = sr.color;
-                break;
-            }
-
-            if (_paperShadow == null)
-                Debug.LogWarning("[Case3Peel] " + (sticker != null ? sticker.name : name) + " has no '" +
-                                 PaperShadowPrefix + "*' child SpriteRenderer: the paper contact shadow " +
-                                 "cannot be hidden during the peel and will follow the sheet off the page.");
-            return _paperShadow;
-        }
 
         /// <summary>Name prefix of the drop-shadow child Case3SceneSetup creates under every sticker.</summary>
         public const string PaperShadowPrefix = "Shadow_";
@@ -769,8 +748,12 @@ namespace Case3
         /// </summary>
         const float ShadowFadeProgress = 0.06f;
 
-        /// <summary>Alpha of the shadow while the sticker rests on the page, read from the scene once.</summary>
-        public float PaperShadowAlpha { get { SpriteRenderer sr = PaperShadow(); return sr != null ? sr.color.a : 0f; } }
+        /// <summary>
+        /// Alpha of the paper contact shadow. Always 0: the shadow sprites are destroyed, and the
+        /// fold is darkened by the curl shader instead. Kept so the gates that assert "no shadow
+        /// follows the sheet" still have something to assert against.
+        /// </summary>
+        public float PaperShadowAlpha { get { return 0f; } }
 
         // ------------------------------------------------------------------ measurement (silhouette gate)
 
