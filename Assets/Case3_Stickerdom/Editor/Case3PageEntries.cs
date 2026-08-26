@@ -286,7 +286,11 @@ public static class Case3PageEntries
             Case3Director.StackCard c = director.stacks[i];
             if (c == null || string.IsNullOrEmpty(c.key)) continue;
             int have = population.TryGetValue(c.key, out int n) ? n : 0;
-            c.requirement = Mathf.Max(director.stackRequirement, have);
+            // The denominator is what the PAGE holds, full stop - not the global requirement.
+            // Max(global, have) printed "2/5" on the Cat card when only two cats exist to collect,
+            // so the counter promised three that were never there. The owner: "iki tane kedi
+            // olduguna gore ikide iki olmasi lazim".
+            c.requirement = Mathf.Max(1, have);
             log.AppendLine(string.Format("  REQUIREMENT {0}: {1} (page holds {2})", c.key, c.requirement, have));
             if (have == 0)
                 Debug.LogError(string.Format(

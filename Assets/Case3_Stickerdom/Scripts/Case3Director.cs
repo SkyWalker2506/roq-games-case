@@ -561,8 +561,17 @@ namespace Case3
             if (card == null || card.sprite == null || index <= 0) return Vector3.zero;
             float w = card.sprite.bounds.size.x * card.transform.lossyScale.x;
             float side = (index % 2 == 1) ? 1f : -1f;
-            float depth = 1f + (index - 1) * 0.55f;
-            return new Vector3(side * w * 0.10f * depth, -w * 0.055f * depth, -0.01f * index);
+
+            // BOUNDED, and that is the point. The offset used to grow linearly with depth
+            // (1 + 0.55 per item), which is fine for two or three and absurd for six: the sixth sheet
+            // sat 0.32 card-widths out and the pile hung off both sides of the card. The owner saw
+            // exactly that on the 6/6 cards - "stickerlar tasmasin, daha ortaya gelsin".
+            //
+            // A pile of real stickers does not fan further and further either; it converges, because
+            // each new one lands on the mound rather than beside it. So the spread saturates: the
+            // first few separate enough to be legible, and after that they stack in place.
+            float depth = 1f - Mathf.Exp(-0.9f * index);        // 0.59, 0.83, 0.93, 0.97, 0.99 ...
+            return new Vector3(side * w * 0.075f * depth, -w * 0.040f * depth, -0.01f * index);
         }
 
         /// <summary>

@@ -627,8 +627,20 @@ namespace Case3
         /// <summary>Name prefix of the drop-shadow child Case3SceneSetup creates under every sticker.</summary>
         public const string PaperShadowPrefix = "Shadow_";
 
-        /// <summary>Peel amount by which the contact shadow has fully faded out.</summary>
-        const float ShadowFadeProgress = 0.30f;
+        /// <summary>
+        /// Peel amount by which the contact shadow has fully faded out.
+        ///
+        /// 0.06, not the 0.30 it used to be. The shadow is a child of the sticker's TRANSFORM, but
+        /// what moves on screen during a peel is the curl MESH - the transform stays where the sheet
+        /// was. So for the whole of the old 30% ramp the shadow sat still at the sheet's old place
+        /// while the paper visibly lifted away from it, which is exactly what the owner reported:
+        /// "hareket etse bile o iz ayni yerde kaliyor, golge gibi ama olmamasi lazim".
+        ///
+        /// Fixing the parenting instead would be wrong: a contact shadow belongs to the CONTACT, so
+        /// it should die the moment the paper stops touching the page rather than travel with it.
+        /// The shadow now goes in the first breath of the peel, before the gap is visible.
+        /// </summary>
+        const float ShadowFadeProgress = 0.06f;
 
         /// <summary>Alpha of the shadow while the sticker rests on the page, read from the scene once.</summary>
         public float PaperShadowAlpha { get { SpriteRenderer sr = PaperShadow(); return sr != null ? sr.color.a : 0f; } }
