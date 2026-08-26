@@ -160,7 +160,50 @@ namespace Case2
         Bounds _artBounds;
 
         /// <summary>Bounds of the art alone. The pick region and the press plane are both anchored to this.</summary>
-        public Bounds ArtBounds { get { return _artBounds; } }
+        /// <summary>
+        /// The art's bounds AS THEY ARE NOW, recomputed on read.
+        ///
+        /// <para>
+        /// This used to return the cached field, which <see cref="BuildArtPickRegion"/> fills at
+        /// Awake - with the block sitting at its HOME position. That was harmless while the
+        /// shatter recentred its cloud onto the hole, because the centre was thrown away. Once the
+        /// recentring was removed so the break would happen where the piece actually is, this
+        /// stale centre became the position the burst spawned at: the start square. The fracture
+        /// must read the LIVE transform on the frame the break fires, so that it stays correct
+        /// even if the settle is interrupted or retimed.
+        /// </para>
+        /// <para>
+        /// Only the bounds are refreshed. <c>_artOffsetWorld</c> and <c>_artCellsLocal</c> are
+        /// captured once on purpose - the offset is deliberately not re-derived from a live
+        /// rotation, and the cells are the pick region - so they are left alone.
+        /// </para>
+        /// </summary>
+        public Bounds ArtBounds { get { RecomputeArtBounds(); return _artBounds; } }
+
+        /// <summary>
+        /// Union of the block's own art meshes, world axes. One copy of this filter, shared by the
+        /// pick region and by the live read above.
+        /// </summary>
+        void RecomputeArtBounds()
+        {
+            if (block == null) return;
+            Bounds b = new Bounds(block.position, Vector3.zero);
+            bool any = false;
+            MeshFilter[] filters = block.GetComponentsInChildren<MeshFilter>(true);
+            for (int i = 0; i < filters.Length; i++)
+            {
+                MeshFilter mf = filters[i];
+                if (mf.sharedMesh == null) continue;
+                MeshRenderer mr = mf.GetComponent<MeshRenderer>();
+                if (mr == null || !mr.enabled) continue;
+                if (mf.transform != block && mf.transform.parent != block) continue;
+                string n = mf.name;
+                if (n.Contains("ActiveFX") || n.Contains("Chain") || n.Contains("Outline")
+                    || n.Contains("Shadow") || n.Contains("GrabDot")) continue;
+                if (!any) { b = mr.bounds; any = true; } else b.Encapsulate(mr.bounds);
+            }
+            if (any) _artBounds = b;
+        }
 
         /// <summary>Root-minus-pointer offset captured on press, so the art does not jump under the finger.</summary>
         Vector3 _grabOffset;
@@ -344,23 +387,12 @@ namespace Case2
             // This is the same filter Case2ShapeProbe measured the authored footprints with - the art
             // mesh on the block or a direct child, no ActiveFX, no Chain - so the mask is anchored to
             // the same bounds the mask was read off.
-            Bounds b = new Bounds(block.position, Vector3.zero);
-            bool any = false;
-            MeshFilter[] filters = block.GetComponentsInChildren<MeshFilter>(true);
-            for (int i = 0; i < filters.Length; i++)
-            {
-                MeshFilter mf = filters[i];
-                if (mf.sharedMesh == null) continue;
-                MeshRenderer mr = mf.GetComponent<MeshRenderer>();
-                if (mr == null || !mr.enabled) continue;
-                if (mf.transform != block && mf.transform.parent != block) continue;
-                string n = mf.name;
-                if (n.Contains("ActiveFX") || n.Contains("Chain") || n.Contains("Outline")
-                    || n.Contains("Shadow") || n.Contains("GrabDot")) continue;
-                if (!any) { b = mr.bounds; any = true; } else b.Encapsulate(mr.bounds);
-            }
-            if (!any) b = _combinedBounds;
-            _artBounds = b;
+            // ONE copy of the art-mesh filter, shared with the live read. A second hand-written
+            // copy of the same rule is the mistake this case has already paid for repeatedly.
+            _artBounds = new Bounds(block.position, Vector3.zero);
+            RecomputeArtBounds();
+            if (_artBounds.size.sqrMagnitude < 1e-8f) _artBounds = _combinedBounds;
+            Bounds b = _artBounds;
 
             Vector3 worldOffset = b.center - block.position;
             worldOffset.y = 0f;
@@ -603,9 +635,19 @@ namespace Case2
             // 0.5 cells to the right of the opening it had just been accepted into. The gate could
             // not see it: SimulateDrop moved the ROOT onto SnapPoint and then asserted the distance
             // between them was zero, which is true by construction whatever the art does.
+            // THE TARGET POSE, read and used verbatim. Everything that used to be worked out here
+            // - which centre to align to, how deep to sink - is now one authored value per hole,
+            // solved once from that hole's own cell list. dropDepth (0.9 in the scene) and
+            // hole.SnapPoint are both out of this path: the first sank the piece too far, and the
+            // second is a bounding-box centre, which is the mistake that has bitten four times.
+            //
+            // ArtOffset stays, and is not the same kind of thing: the pose says where the block's
+            // ART must end up, and this converts that into where its TRANSFORM must go. It is a
+            // coordinate change, not a guess at a shape's centre.
             Vector3 artOffset = ArtOffset;
-            Vector3 to = new Vector3(hole.SnapPoint.x - artOffset.x, _homePos.y - dropDepth,
-                                     hole.SnapPoint.z - artOffset.z);
+            Vector3 pose = hole.TargetPose(_shapeId);
+            Vector3 to = new Vector3(pose.x - artOffset.x, _homePos.y + pose.y - hole.SnapPoint.y,
+                                     pose.z - artOffset.z);
             Vector3 fromScale = block.localScale;
             Quaternion fromRot = block.rotation;
             // Inset HORIZONTALLY ONLY. A uniform scale is applied about the pivot, which sits at

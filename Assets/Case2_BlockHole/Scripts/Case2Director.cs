@@ -49,6 +49,16 @@ namespace Case2
         /// </para>
         /// </summary>
         public const float SnapSecondsFixed = 0.50f;
+
+        /// <summary>
+        /// Dwell between the piece settling and the break firing. OWNER-DIRECTED, and a deliberate
+        /// deviation from the measurement rather than a re-fit of it: the reference's dwell is
+        /// 0.169 s and the scene's anticipationDuration of 0.15 s already matched it. The context
+        /// changed underneath that number - with the drop now taking 0.50 s instead of 0.06 s, the
+        /// total wait before anything breaks is much longer and the pause at the bottom reads as a
+        /// stall. "yerlestikten sonra shatter olmasi daha hizli olsun, cok bekliyorsun."
+        /// </summary>
+        public const float DwellSecondsFixed = 0.08f;
         public float anticipationDuration = 0.95f;
         public float shatterDuration = 0.35f;
         public float sinkDuration = 0.35f;
@@ -264,7 +274,7 @@ namespace Case2
             // fire while the block is still in the air. The old code derived tAntic from an
             // absolute tSnap computed before the drop began; with a 0.06 s fall the difference was
             // invisible, with a 0.5 s one it would break in mid-flight.
-            float tAntic = SequenceTime + anticipationDuration;
+            float tAntic = SequenceTime + DwellSecondsFixed;
             float tShatter = tAntic + shatterDuration;
             float tSink = tShatter + sinkDuration;
             float tClose = tSink + closeDuration;
@@ -273,9 +283,9 @@ namespace Case2
             if (record)
             {
                 BeginStep("shatter");
-                Fire(JuiceEvent.Anticipation, anticipationDuration.ToString("0.00") + " s hold and compress before the break");
+                Fire(JuiceEvent.Anticipation, DwellSecondsFixed.ToString("0.00") + " s hold and compress before the break");
             }
-            Squash.SquashStretch(d.Block, SquashAxis.Y, -0.055f, anticipationDuration, EaseType.InQuad);
+            Squash.SquashStretch(d.Block, SquashAxis.Y, -0.055f, DwellSecondsFixed, EaseType.InQuad);
             yield return WaitUntil(tAntic);
 
             // The neon hands over to the pit: the glow dies as the dark opening takes its place.
@@ -345,7 +355,7 @@ namespace Case2
             if (record)
             {
                 float observedFall = SequenceTime - _dropTime;
-                float authoredFall = SnapSecondsFixed + anticipationDuration + shatterDuration + sinkDuration;
+                float authoredFall = SnapSecondsFixed + DwellSecondsFixed + shatterDuration + sinkDuration;
                 Fire(JuiceEvent.Deform, string.Format("shards fully inside the hole; drop -> end of fall = {0:0.00} s", authoredFall));
                 Debug.Log(string.Format("[Case2] PROOF drop -> end of readable fall = {0:0.000} s (authored {1:0.000} s)",
                     observedFall, authoredFall));

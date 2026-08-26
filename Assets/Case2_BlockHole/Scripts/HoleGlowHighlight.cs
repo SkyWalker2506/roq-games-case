@@ -407,6 +407,101 @@ namespace Case2
         }
 
         /// <summary>
+        /// Where a block of <paramref name="blockShape"/> should bring its ART BOUNDS CENTRE to
+        /// rest so that its own cells land on THIS opening's cells.
+        ///
+        /// <para>
+        /// This replaces <see cref="SnapPoint"/> for seating, and it is the fifth appearance today
+        /// of one root: a BOUNDING-BOX CENTRE standing in for a shape's actual cells.
+        /// </para>
+        /// <para>
+        /// MEASURED. The green hole is a five-cell P - the shader draws 3x2 with the lower-left
+        /// cell left as board (shapeType 0), HoleMask says {"###", ".##"}, and both agree with the
+        /// reference. The green BLOCK is a 2x2: its art bounds measure 2.000 x 2.000. Seating put
+        /// the block's 2x2 bbox centre on the hole's 3x2 bbox centre, which leaves the block
+        /// straddling the middle of the opening, sitting half a cell off in x and covering no
+        /// complete cell column - "gidiyor objenin ortasinda duruyor", exactly.
+        /// </para>
+        /// <para>
+        /// The fix is to stop comparing boxes and compare CELLS: slide the block's mask over the
+        /// hole's mask and take the whole-cell offset with the most overlap, breaking ties toward
+        /// the centred position. For the cross, the bar and the L, whose block and hole masks are
+        /// identical, the best offset is zero and this returns exactly what SnapPoint returned -
+        /// so those three cannot move. For the square it returns half a cell to the right, seating
+        /// the 2x2 on the P's right-hand 2x2, whose cells are real tile centres.
+        /// </para>
+        /// </summary>
+        public const float SeatDepth = 0.72f;
+
+        readonly System.Collections.Generic.Dictionary<BlockShapeId, Vector3> _seatCache
+            = new System.Collections.Generic.Dictionary<BlockShapeId, Vector3>();
+
+        /// <summary>
+        /// THE TARGET POSE. One value per hole per block shape, solved once from the hole's own
+        /// cell list and then simply read - "objelerin target poz gibi bir yer olsun, oraya
+        /// gitsinler". The drop tween's endpoint is this and nothing else: no hole centre, no
+        /// bounds centre, no per-shape correction anywhere in the path. Depth is part of the pose,
+        /// so "too deep" is an authored number (<see cref="SeatDepth"/>) rather than a computed
+        /// one.
+        /// <para>
+        /// y is the seat DEPTH below the board, not the board surface: the piece comes to rest
+        /// inside the opening and breaks there.
+        /// </para>
+        /// </summary>
+        public Vector3 TargetPose(BlockShapeId blockShape)
+        {
+            Vector3 seat;
+            if (!_seatCache.TryGetValue(blockShape, out seat))
+            {
+                seat = SolveSeat(blockShape);
+                _seatCache[blockShape] = seat;
+            }
+            return seat;
+        }
+
+        Vector3 SolveSeat(BlockShapeId blockShape)
+        {
+            BlockShapeId hid = shapeId != BlockShapeId.Unknown ? shapeId : BlockShapeIds.Parse(shapeKey);
+            string[] H = HoleMask(hid);
+            string[] B = BlockShapeIds.Mask(blockShape);
+            Vector3 pivot = transform.position;
+            if (H == null || B == null || H.Length == 0 || B.Length == 0) return SeatY(SnapPoint);
+
+            int hr = H.Length, hc = H[0].Length;
+            int br = B.Length, bc = B[0].Length;
+            if (br > hr || bc > hc) return SeatY(SnapPoint);
+
+            int bestDc = 0, bestDr = 0, bestScore = -1;
+            float bestTie = float.MaxValue;
+            for (int dr = 0; dr <= hr - br; dr++)
+            for (int dc = 0; dc <= hc - bc; dc++)
+            {
+                int score = 0;
+                for (int r = 0; r < br; r++)
+                for (int c = 0; c < bc && c < B[r].Length; c++)
+                {
+                    if (B[r][c] != '#') continue;
+                    int R = dr + r, C = dc + c;
+                    if (R < H.Length && C < H[R].Length && H[R][C] == '#') score++;
+                }
+                // Tie-break toward the centred placement, so a symmetric case cannot drift.
+                float tie = Mathf.Abs(dc - (hc - bc) * 0.5f) + Mathf.Abs(dr - (hr - br) * 0.5f);
+                if (score > bestScore || (score == bestScore && tie < bestTie))
+                {
+                    bestScore = score; bestTie = tie; bestDc = dc; bestDr = dr;
+                }
+            }
+
+            // Same cell convention CacheCellTiles uses: column 0 is -x, row 0 is +z.
+            return new Vector3(
+                pivot.x - hc * 0.5f + bestDc + bc * 0.5f,
+                SnapPoint.y - SeatDepth,
+                pivot.z + hr * 0.5f - bestDr - br * 0.5f);
+        }
+
+        static Vector3 SeatY(Vector3 v) { return new Vector3(v.x, v.y - SeatDepth, v.z); }
+
+        /// <summary>
         /// Finds the board tile sitting in each cell of this opening, once. The tiles are always
         /// there - the pit plate is a quad ABOVE an intact grid, not a cut in the board - so the
         /// rise only has to move them, not create them.
