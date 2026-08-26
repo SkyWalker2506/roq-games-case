@@ -675,6 +675,25 @@ namespace Case3
         /// The offset is a pure function of the pose, not of the position, so one probe measures it
         /// exactly: place, ask where the paper landed, subtract. Costs one 9x9 curl sample per frame.
         /// </summary>
+        /// <summary>
+        /// Moves the sheet so its HINGE lands on <paramref name="target"/>.
+        ///
+        /// Exact in one step, unlike <see cref="PlaceDrawnAt"/>: the pivot is a fixed point in local
+        /// space, so the offset between it and the transform does not depend on how far the sheet has
+        /// rolled. Measure once, translate, done.
+        /// </summary>
+        void PlacePivotAt(StickerPeel peel, Vector3 target)
+        {
+            if (_stickerTf == null) return;
+            if (peel == null) { _stickerTf.position = target; return; }
+
+            Vector3 pivot = peel.PivotWorld();
+            Vector3 p = _stickerTf.position;
+            _stickerTf.position = new Vector3(p.x + (target.x - pivot.x),
+                                              p.y + (target.y - pivot.y),
+                                              target.z);
+        }
+
         void PlaceDrawnAt(StickerPeel peel, Vector3 target)
         {
             if (_stickerTf == null) return;
@@ -1199,7 +1218,6 @@ namespace Case3
             // gibi". As a sheet rolls up its drawn centre naturally travels toward the stuck edge, so
             // forbidding the centre to move leaves rotation as the only thing left for it to do.
             // Hold the edge and the middle is free to come with the roll, which is what paper does.
-            Vector3 drawnHome = peel.VisualWorldCentre(9);
             Vector3 peelPivotHome = peel.PivotWorld();
 
             // LIFT THE SHEET ABOVE THE PAGE BEFORE IT PEELS, not when it flies.
@@ -1235,16 +1253,21 @@ namespace Case3
                 float e = Ease.Evaluate(EaseType.OutCubic, k);
 
                 peel.SetProgress(e * peelEnd);
-                // THE OBJECT'S CENTRE DOES NOT MOVE - and the centre that counts is the DRAWN one.
+                // THE HINGE IS WHAT STAYS PUT. Not the transform, not the drawn centre.
                 //
-                // Holding the transform is not the same thing. At full peel the flap is mirrored about
-                // the fold line, so the drawing reaches well past the footprint it started in and the
-                // sheet visibly walks away from where it was lying: "tamamen acinca yine ana objeden
-                // uzaklasiyor bayagi". The transform never moved; the paper did.
+                // Both of the others have been tried and each buys the other's complaint. Pinning the
+                // transform pins the sprite's ORIGIN, which is not where the paper is stuck, so the
+                // drawing runs off as the roll grows: "tamamen acinca yine ana objeden uzaklasiyor".
+                // Pinning the drawn centre forbids the one motion a rolling sheet must have - its
+                // area migrates toward the stuck edge - so the only freedom left is spin about the
+                // middle: "su an donerken tam merkezden donuyor gibi oluyor, kenardan donmesi lazim".
                 //
-                // Pinning the drawn centre makes all three phases hold the same point - peel, flight
-                // and flip - which is also why the phase boundaries no longer jump.
-                PlaceDrawnAt(peel, drawnHome + new Vector3(0f, peelLift * e, -0.05f * e));
+                // The hinge is neither. PivotWorld() is a FIXED point in the sheet's local space, so
+                // unlike AnchoredEdgeWorld (derived from the curl's bounds, which grow with the roll)
+                // it is a real hinge rather than a moving one. Hold it and the corner stays nailed to
+                // the page while the rest swings up around it, which is what the owner is describing
+                // and what paper does.
+                PlacePivotAt(peel, peelPivotHome + new Vector3(0f, peelLift * e, -0.05f * e));
 
                 // Two-layer rule from .plan-build/audio.md: main hit, second accent 0.10-0.14 s later.
                 if (!secondPeelLayer && SequenceClock - _t0 >= tTap + 0.10f)
@@ -1256,9 +1279,9 @@ namespace Case3
             }
 
             peel.SetProgress(peelEnd);
-            // Same rule as the loop above: place the PAPER, then read where that left the transform.
+            // Same rule as the loop above: hold the hinge, then read where that left the transform.
             Vector3 endLift = new Vector3(0f, peelLift, -0.05f);
-            PlaceDrawnAt(peel, drawnHome + endLift);
+            PlacePivotAt(peel, peelPivotHome + endLift);
             // The flight interpolates between two DRAWN positions - it ends with
             // PlaceDrawnAt(peel, restCentre) - so its start has to be a drawn position too. Handing it
             // the transform made the first flight frame snap by the curl offset, because frame 0
