@@ -202,6 +202,7 @@ namespace Case3
             public float t;
             public string phase;
             public Vector3 drawn;      // what the player sees: curl mesh AABB centre
+            public Vector3 pivot;      // the hinge: fixed in local space, so a true anchor
             public Vector3 origin;     // sticker.transform.position, for naming the writer
         }
 
@@ -693,6 +694,36 @@ namespace Case3
         /// space, so the offset between it and the transform does not depend on how far the sheet has
         /// rolled. Measure once, translate, done.
         /// </summary>
+        /// <summary>
+        /// Where the sheet's hinge sits when the sheet lies FLAT, at its landed pose, centred on
+        /// <paramref name="restCentre"/>.
+        ///
+        /// Measured by briefly putting the sheet in that pose and reading it back, then restoring
+        /// everything the caller was holding. Deriving it instead would mean re-implementing the
+        /// pivot's dependence on the tapped corner, the rest rotation and the landed scale, and any
+        /// one of those going stale is the bug class this scene has produced six times today.
+        /// </summary>
+        Vector3 MeasurePivotAtRest(StickerPeel peel, Vector3 restCentre, Quaternion restRotation,
+                                   Vector3 landedScale, Quaternion keepRotation, Vector3 keepScale,
+                                   float keepProgress)
+        {
+            if (_stickerTf == null || peel == null) return restCentre;
+
+            Vector3 keepPos = _stickerTf.position;
+
+            _stickerTf.rotation = restRotation;
+            _stickerTf.localScale = landedScale;
+            peel.SetProgress(0f);
+            PlaceDrawnAt(peel, restCentre);
+            Vector3 pivot = peel.PivotWorld();
+
+            _stickerTf.position = keepPos;
+            _stickerTf.rotation = keepRotation;
+            _stickerTf.localScale = keepScale;
+            peel.SetProgress(keepProgress);
+            return pivot;
+        }
+
         void PlacePivotAt(StickerPeel peel, Vector3 target)
         {
             if (_stickerTf == null) return;
@@ -736,6 +767,7 @@ namespace Case3
                 t = SequenceClock - _t0,
                 phase = phase,
                 drawn = _tracePeel.VisualWorldCentre(9),
+                pivot = _tracePeel.PivotWorld(),
                 origin = _stickerTf != null ? _stickerTf.position : Vector3.zero
             });
         }
@@ -786,7 +818,11 @@ namespace Case3
                 float moved = 0f;
                 if (i > 0 && flightEnd >= 0 && i > flightEnd)
                 {
-                    moved = (_trace[i].drawn - _trace[i - 1].drawn).magnitude;
+                    // The HINGE, not the drawn centre. Once the sheet is on the card it is pressed
+                    // flat FROM its hinge, so the drawn centroid legitimately travels as the paper
+                    // lays down - measuring that would fail a landing that is working. What must not
+                    // move after the flight is the corner the sheet is bedding down from.
+                    moved = (_trace[i].pivot - _trace[i - 1].pivot).magnitude;
                     postTravel += moved;
                     if (moved > postWorstStep) { postWorstStep = moved; postWorstIndex = i; }
                 }
@@ -800,17 +836,22 @@ namespace Case3
 
             // A: the flight only ever closes the gap. Catches an instant hop AWAY - the fan write.
             bool a = reversals == 0;
-            // B: the flight IS the landing. Once flightDuration has elapsed the drawn sheet is home and
-            //    does not move again. This is the check that catches a SMOOTH second move, which A
-            //    cannot see: a correction that happens to point AT the target still reads to the player
-            //    as a second move, and that is what the curl unwind was doing.
+            // B: the flight IS the landing. Once flightDuration has elapsed the HINGE is home and does
+            //    not move again. This is the check that catches a SMOOTH second move, which A cannot
+            //    see: a correction that happens to point AT the target still reads to the player as a
+            //    second move, and that is what the curl unwind was doing.
+            //
+            //    It used to measure the drawn centre. That was right while the sheet was supposed to
+            //    hold still on the card, and wrong now that it beds down from its edge: laying flat
+            //    moves the centroid on purpose. Measuring the hinge keeps the check honest instead of
+            //    loosening the budget until the new behaviour squeaks through.
             bool b = flightEnd >= 0 && postTravel <= band;
 
             sb.AppendFormat("  CHECK A  flight approaches monotonically : {0} - {1} frame(s) retreated by more " +
                             "than {2:0.0000} u; worst {3:0.0000} u ({4:0.0}% of chord){5}\n",
                             a ? "GREEN" : "RED", reversals, band, worst, 100f * worst / _traceChord,
                             worstIndex >= 0 ? " in phase '" + _trace[worstIndex].phase + "'" : "");
-            sb.AppendFormat("  CHECK B  the flight IS the landing      : {0} - the drawn sheet travelled " +
+            sb.AppendFormat("  CHECK B  the flight IS the landing      : {0} - the hinge travelled " +
                             "{1:0.0000} u ({2:0.0}% of chord) AFTER the flight ended; budget {3:0.0000} u. " +
                             "Largest single frame {4:0.0000} u{5}\n",
                             b ? "GREEN" : "RED", postTravel, 100f * postTravel / _traceChord, band, postWorstStep,
@@ -1323,6 +1364,15 @@ namespace Case3
 
             Vector3 flightEndScale = slotScale * flightShrink;
 
+            // WHERE THE HINGE HAS TO END UP for the flat sheet to sit centred on the card.
+            //
+            // Probed, not derived: it depends on the rest rotation and the landed scale as well as on
+            // which corner the tap chose, so the only reliable way to know it is to put the sheet in
+            // its final pose, ask, and put it back. One frame of bookkeeping, no allocation.
+            Vector3 pivotRest = MeasurePivotAtRest(peel, restCentre, restRotation, slotScale,
+                                                   _stickerTf.rotation, _stickerTf.localScale, peelEnd);
+            Vector3 pivotLaunch = peel.PivotWorld();
+
             TraceBegin(peel, Vector3.Distance(drawnLaunch, restCentre));
             TraceMark("flight");
 
@@ -1353,8 +1403,11 @@ namespace Case3
                 // stays; the unroll got the time instead.
                 peel.SetProgress(peelEnd);
 
-                Vector3 want = flight.Evaluate(drawnLaunch, restCentre, e);
-                PlaceDrawnAt(peel, want);
+                // The flight carries the HINGE, because the flip is about to hinge on it. Aiming the
+                // drawn centre here and then hinging there put the two in different places and the
+                // difference had to be spent somewhere - it was spent as a jump at the phase boundary.
+                Vector3 want = flight.Evaluate(pivotLaunch, pivotRest, e);
+                PlacePivotAt(peel, want);
                 // The trail follows the PAPER, not the transform the paper is hanging off.
                 flight.TryEmit(want, SequenceClock);
                 TraceMark("flight");
@@ -1364,7 +1417,7 @@ namespace Case3
             _stickerTf.localScale = flightEndScale;
             _stickerTf.rotation = restRotation;
             peel.SetProgress(peelEnd);
-            PlaceDrawnAt(peel, restCentre);
+            PlacePivotAt(peel, pivotRest);
             TraceMark("flight-end");
             EndStep();
 
@@ -1394,18 +1447,18 @@ namespace Case3
                 // approached 0.99 from above, so the beat had no contact in it.
                 float press = 1f - 0.045f * Mathf.Sin(k * Mathf.PI);
                 _stickerTf.localScale = Vector3.Lerp(flightEndScale, slotScale, Ease.Evaluate(EaseType.OutQuad, k)) * press;
-                // Pin the PAPER, exactly as the flight did. The flight ends with
-                // PlaceDrawnAt(peel, restCentre), i.e. the transform parked wherever it had to be for
-                // the DRAWN sheet to sit on the card. Writing the transform straight to restCentre
-                // here therefore moves the drawing by the whole curl offset in one frame - measured
-                // at 3.47 u on both cats, a 3.47 u teleport backwards at 'flip' followed by the sheet
-                // walking the same path a second time. That is the owner's "birden isinlanma gibi bir
-                // sey oluyor", and CHECK A/CHECK B fail on exactly that frame.
+                // THE SHEET IS PRESSED DOWN FROM ITS EDGE. The owner: "ucundan yerlestirip sanki
+                // sticker yapistirir gibi yapistirmasi lazim, burada sanki flip oluyor gibi".
                 //
-                // The centre that must not move is the one you can see. Re-pinning it every frame
-                // holds it still while the roll unwinds around it, which is also what makes the
-                // unroll read as relaxing open rather than as arriving twice.
-                PlaceDrawnAt(peel, restCentre);
+                // Holding the drawn centre here was the same mistake the peel had, one phase later.
+                // Forbid the drawn centre to move and a sheet unrolling has no way to lay itself
+                // down; all that is left is to turn over about its middle, which is a flip. Holding
+                // the hinge instead means the corner touches the card first and the rest of the paper
+                // rolls flat away from it, which is what pressing a sticker down looks like.
+                //
+                // pivotRest is where the hinge must be for the FLAT sheet to sit centred, so the last
+                // frame of the unroll lands the sticker exactly on the card with no correction.
+                PlacePivotAt(peel, pivotRest);
                 TraceMark("flip");
                 yield return null;
             }
