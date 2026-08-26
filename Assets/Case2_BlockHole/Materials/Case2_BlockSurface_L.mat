@@ -33,15 +33,20 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _GrainSideMul: 0.12
+    - _SheenAmt: 0.075
+    - _WallShade: 0.55
+    - _WallTop: 1
+    - _WallBot: 0
     - _EdgeLift: 0.06
     - _FaceContrast: 0.08
-    - _GrainScale: 14
-    - _GrainStrength: 0.294
     - _GrainFrequency: 2.1
+    - _GrainScale: 14
+    - _GrainStrength: 0.205
     - _PatternInfluence: 0.55
     - _Smoothness: 0.08
     - _TextureInfluence: 0
     m_Colors:
-    - _BaseColor: {r: 0.925, g: 0.173, b: 0.247, a: 1}
+    - _BaseColor: {r: 0.8605, g: 0.0549, b: 0.2005, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

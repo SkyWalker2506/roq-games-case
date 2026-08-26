@@ -52,6 +52,10 @@ Shader "Case2/BoardTile"
         _GradX("Face Gradient toward +x", Range(0, 0.5)) = 0.03
         _GradZ("Face Gradient toward -z", Range(0, 0.5)) = 0.03
         _FaceLevel("Tile Face Level", Range(0.6, 1.2)) = 0.96
+
+        // The ONLY light-driven term on this surface. The tile colour stays authored; the
+        // main light contributes nothing but its shadow attenuation.
+        _ShadowStrength("Cast Shadow Strength", Range(0, 1)) = 0.55
     }
     SubShader
     {
@@ -64,7 +68,10 @@ Shader "Case2/BoardTile"
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             TEXTURE2D(_SheenMap);
             SAMPLER(sampler_SheenMap);
@@ -89,6 +96,7 @@ Shader "Case2/BoardTile"
             float _GradX;
             float _GradZ;
             float _FaceLevel;
+            float _ShadowStrength;
             CBUFFER_END
 
             struct Attributes
@@ -159,6 +167,12 @@ Shader "Case2/BoardTile"
                 // Board-wide vertical ambient gradient.
                 float boardV = saturate((input.positionWS.z - 0.5) / 7.5);
                 finalCol *= 1.0 + (boardV - 0.5) * _VerticalGrad;
+
+                // Cast shadow only - no diffuse, no specular, no ambient from the light.
+                // Moving the light changes the shadow and nothing else.
+                float4 shadowCoord = TransformWorldToShadowCoord(input.positionWS);
+                Light mainLight = GetMainLight(shadowCoord);
+                finalCol *= 1.0 - (1.0 - mainLight.shadowAttenuation) * _ShadowStrength;
 
                 return half4(finalCol, 1.0);
             }

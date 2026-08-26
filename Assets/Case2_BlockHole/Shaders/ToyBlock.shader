@@ -55,6 +55,14 @@ Shader "Case2/ToyBlock"
         _EdgeLift("Bevel Edge Highlight", Range(0, 0.8)) = 0.22
         _FaceContrast("Volumetric Face Contrast", Range(0, 0.8)) = 0.35
         _Smoothness("Smoothness", Range(0, 1)) = 0.30
+
+        // Owner constraint: the surface must NOT respond to the scene light. Everything below
+        // is authored in the material; the key direction is a CONSTANT, not GetMainLight().
+        _GrainSideMul("Grain on Side Walls (x)", Range(0, 1)) = 0.12
+        _SheenAmt("Plastic Sheen Across Face", Range(0, 0.6)) = 0.08
+        _WallShade("Side Wall Bottom Shade", Range(0, 1)) = 0.55
+        _WallTop("Side Wall Top (object Y)", Float) = 1.0
+        _WallBot("Side Wall Bottom (object Y)", Float) = 0.0
     }
     SubShader
     {
@@ -81,7 +89,17 @@ Shader "Case2/ToyBlock"
             float _EdgeLift;
             float _FaceContrast;
             float _Smoothness;
+            float _GrainSideMul;
+            float _SheenAmt;
+            float _WallShade;
+            float _WallTop;
+            float _WallBot;
             CBUFFER_END
+
+            // Authored key direction. The blocks are art-directed flat: swapping the scene
+            // light must not change the face colour. Only the cast shadow is light-driven,
+            // and that lives in the ShadowCaster pass / the board tile, not here.
+            #define TOY_KEY_DIR normalize(float3(-0.42, 0.82, -0.39))
 
             struct Attributes
             {
@@ -146,15 +164,15 @@ Shader "Case2/ToyBlock"
                 // 46 px wave carries almost no second derivative. Squaring the profile up with a
                 // smoothstep is what puts the edge back.
                 float g = saturate(combined * 0.5 + 0.5);
-                g = smoothstep(0.34, 0.72, g);
-                return pow(g, 1.4);
+                g = smoothstep(0.28, 0.80, g);
+                return pow(g, 1.2);
             }
 
             half4 frag(Varyings input) : SV_Target
             {
                 float3 N = normalize(input.normalWS);
                 float3 Vd = SafeNormalize(GetWorldSpaceViewDir(input.positionWS));
-                Light l = GetMainLight();
+                float3 keyDir = TOY_KEY_DIR;
 
                 // 1. Organic Painted Wood Grain (Evaluated per object face in local coords)
                 float2 faceUV = input.uv;
@@ -162,7 +180,12 @@ Shader "Case2/ToyBlock"
                 else if (abs(N.x) > 0.5) faceUV = input.positionOS.zy * 1.5;
                 else faceUV = input.positionOS.xy * 1.5;
 
-                float grain = WoodGrain(faceUV);
+                // The reference's SIDE wall is a smooth dark gradient; ours drew the same
+                // grain there, which produced a stack of repeated bands that read as several
+                // extruded slices instead of one clean wall. That stack is shading, NOT
+                // geometry: Block-L is a single mesh, object bounds y 0..1.
+                float isTop = step(0.5, abs(N.y));
+                float grain = WoodGrain(faceUV) * lerp(_GrainSideMul, 1.0, isTop);
                 // Value variation (albedo relief)
                 half3 albedo = _BaseColor.rgb * (1.0 - grain * _GrainStrength);
 
@@ -179,7 +202,7 @@ Shader "Case2/ToyBlock"
 
                 // 2. Volumetric Shading & Beveling:
                 // Lit top face (+Y), darker side walls, ambient contrast
-                float ndl = saturate(dot(perturbedN, normalize(l.direction)));
+                float ndl = saturate(dot(perturbedN, keyDir));
                 float topLighting = saturate(N.y * 0.45 + 0.55); // Top is significantly brighter than sides
                 float sideLighting = saturate(1.0 - abs(N.y)) * (0.85 - _FaceContrast);
                 float faceVol = topLighting - sideLighting * 0.35;
@@ -188,12 +211,63 @@ Shader "Case2/ToyBlock"
                 float bevelEdge = pow(1.0 - saturate(dot(N, Vd)), 2.5) * _EdgeLift;
 
                 // Directional specular gloss on toy surface
-                float3 H = normalize(normalize(l.direction) + Vd);
+                float3 H = normalize(keyDir + Vd);
                 float spec = pow(saturate(dot(perturbedN, H)), 24.0) * _Smoothness * topLighting;
 
-                half3 finalCol = albedo * (0.75 + ndl * 0.25) * faceVol + half3(1, 1, 1) * (bevelEdge + spec);
+                // Broad low-gloss sheen across the top face - this is the whole of "plastik
+                // gibi". A flat fill has a near-zero low-frequency range; the reference's face
+                // wanders by ~14 sRGB luma across itself (blurred at 14 px), ours by ~0 once
+                // the grain stripes are removed. Driven by object position, not by the light.
+                float sheenRamp = saturate(0.5 - input.positionOS.x * 0.16 - input.positionOS.z * 0.26);
+                float sheen = isTop * _SheenAmt * sheenRamp;
+
+                // Side wall: one smooth fall to near-black at the base, as in the reference.
+                float wallT = saturate((_WallTop - input.positionOS.y) / max(_WallTop - _WallBot, 1e-3));
+                float wallShade = (1.0 - isTop) * _WallShade * wallT;
+
+                half3 finalCol = albedo * (0.75 + ndl * 0.25) * faceVol * (1.0 + sheen - wallShade)
+                               + half3(1, 1, 1) * (bevelEdge + spec);
                 return half4(finalCol, _BaseColor.a);
             }
+            ENDHLSL
+        }
+
+        // Without this pass the block cannot cast at all, whatever the renderer's
+        // shadowCastingMode says - the previous shader had a single ForwardLit pass and
+        // Fallback Off, so the board had nothing to receive.
+        Pass
+        {
+            Name "ShadowCaster"
+            Tags { "LightMode"="ShadowCaster" }
+            ZWrite On ZTest LEqual ColorMask 0 Cull Back
+            HLSLPROGRAM
+            #pragma vertex ShadowVert
+            #pragma fragment ShadowFrag
+            #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            float3 _LightDirection;
+
+            struct SAttr { float4 positionOS : POSITION; float3 normalOS : NORMAL; };
+            struct SVary { float4 positionCS : SV_POSITION; };
+
+            SVary ShadowVert(SAttr input)
+            {
+                SVary o;
+                float3 posWS = TransformObjectToWorld(input.positionOS.xyz);
+                float3 nrmWS = TransformObjectToWorldNormal(input.normalOS);
+                float4 cs = TransformWorldToHClip(ApplyShadowBias(posWS, nrmWS, _LightDirection));
+                #if UNITY_REVERSED_Z
+                cs.z = min(cs.z, UNITY_NEAR_CLIP_VALUE);
+                #else
+                cs.z = max(cs.z, UNITY_NEAR_CLIP_VALUE);
+                #endif
+                o.positionCS = cs;
+                return o;
+            }
+
+            half4 ShadowFrag(SVary i) : SV_Target { return 0; }
             ENDHLSL
         }
     }
