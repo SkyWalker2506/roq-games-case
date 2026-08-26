@@ -1666,10 +1666,10 @@ public static class Case1SceneSetup
         // however the profile is shaped there is nowhere for a curve to appear - the reference's
         // sockets bend into the hole over a visible width. See the monotonic outer ramp in
         // SoftPlastic.shader, which is the other half of this.
-        m.SetFloat("_IndentBevel", 0.05f);
+        m.SetFloat("_IndentBevel", 0.032f);
         m.SetFloat("_IndentCornerSink", 0.9f);
-        m.SetFloat("_IndentCreaseAO", 0.28f);
-        m.SetFloat("_IndentLipStrength", 0.75f);
+        m.SetFloat("_IndentCreaseAO", 0.18f);
+        m.SetFloat("_IndentLipStrength", 0.3f);
         // USER: "derinligi artir genel olarak". Every INTENSIVE depth ratio was already at or past
         // the reference - floor/face 0.068-0.178 against its 0.067-0.152, intra-socket contrast
         // 0.54-0.85 against its 0.51-0.76, top-to-bottom gradient +0.42 to +0.77 against its +0.16
