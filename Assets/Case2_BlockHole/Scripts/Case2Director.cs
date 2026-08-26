@@ -369,7 +369,6 @@ namespace Case2
             // pops. Those two lines are what renders. FlashSeal does NOT - it drives _glow, and
             // ApplyGlow disables the glow plate every frame - so do not read the line below as
             // part of the seal's look.
-            hole.Spend(spentFadeDuration);
             hole.ClosePit(closeDuration);
             // The board coming back is a MOTION in the reference, not a fade: each cell's tile pops
             // up out of the sealing cavity and settles flush, staggered across the opening. Measured
@@ -381,6 +380,11 @@ namespace Case2
             // falling through the opening; a late white puff masks that motion and reads as a reset VFX.
             AudioService.Play(SfxId.TapPop, 0.22f);
             yield return WaitUntil(tClose);
+            // LAST, not first. "bu acik kalmali hepsi yerlesene kadar" - the lit opening is what
+            // says where the pieces are going, so it holds until every tile has risen and settled
+            // and only then gives the shape up. Spending it any earlier leaves a stretch where the
+            // hole has stopped announcing itself and the board has not yet arrived.
+            hole.Spend(spentFadeDuration);
             if (record) EndStep();
         }
 
