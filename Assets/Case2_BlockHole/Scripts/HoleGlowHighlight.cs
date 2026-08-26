@@ -576,6 +576,32 @@ namespace Case2
             if (r != null && r.enabled != visible) r.enabled = visible;
         }
 
+        static readonly int ClipMinYId = Shader.PropertyToID("_ClipMinY");
+        MaterialPropertyBlock _tileMpb;
+
+        /// <summary>
+        /// Lifts or restores the tray-floor clip on ONE cell tile.
+        ///
+        /// The clip exists so a resting tile does not hang under a board whose border is 0.08 units
+        /// tall. A RISING tile is a different case: it is climbing out of an opening the player is
+        /// looking into, so the part below the floor is exactly what should be seen. Clipping it
+        /// there is what made the climb invisible and left the tile appearing at the plane already
+        /// arrived - "hic hareket etmiyor, direk geliyor".
+        ///
+        /// Per-renderer through a property block, so the shared board materials are untouched and
+        /// the other 50-odd tiles stay clipped while these few are in the air.
+        /// </summary>
+        void SetTileClipped(int i, bool clipped)
+        {
+            if (_cellTileRenderers == null || i >= _cellTileRenderers.Length) return;
+            Renderer r = _cellTileRenderers[i];
+            if (r == null) return;
+            if (_tileMpb == null) _tileMpb = new MaterialPropertyBlock();
+            r.GetPropertyBlock(_tileMpb);
+            _tileMpb.SetFloat(ClipMinYId, clipped ? -0.02f : -1000f);
+            r.SetPropertyBlock(_tileMpb);
+        }
+
         /// <summary>Half the widest side of this opening, world units. Read by the gate.</summary>
         public float OpeningHalfExtent
         {
@@ -692,7 +718,11 @@ namespace Case2
             // Drop it into the pit for the whole stagger delay, so it is genuinely waiting down
             // there when its turn comes rather than appearing at depth on its first moving frame.
             if (t != null) t.position = new Vector3(home.x, home.y + RiseCurve(0f), home.z);
-            SetTileVisible(i, false);           // waiting ~5 units down inside the pit
+            // Waiting deep inside the pit, and VISIBLE down there: the opening is what the player is
+            // looking into, so the tile should be seen sitting at the bottom of it and then climbing
+            // the whole way out. The owner: "cok derinden 2 metre yukari gelip inmeli."
+            SetTileClipped(i, false);
+            SetTileVisible(i, true);
             float end = Time.time + delay;
             while (Time.time < end) yield return null;
 
@@ -704,14 +734,11 @@ namespace Case2
                 if (k >= 1f) break;
                 float h = RiseCurve(k);
                 if (t != null) t.position = new Vector3(home.x, home.y + h, home.z);
-                // Clipped below, free above. The cube appears the moment it reaches the board
-                // plane and may exceed the opening freely from there - which is the overshoot the
-                // reference plays and the owner explicitly allows.
-                SetTileVisible(i, h >= -0.001f);
                 yield return null;
             }
             if (t != null) t.position = home;      // exact, not recomputed
             SetTileVisible(i, true);
+            SetTileClipped(i, true);               // home again: the body goes back under the floor
         }
 
         /// <summary>
