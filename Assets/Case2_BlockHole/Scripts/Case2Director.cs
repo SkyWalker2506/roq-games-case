@@ -406,10 +406,11 @@ namespace Case2
 
         // ------------------------------------------------------------------ user drop
 
-        void HandleUserDrop(BlockDragController d, HoleGlowHighlight hole)
+        bool HandleUserDrop(BlockDragController d, HoleGlowHighlight hole)
         {
-            if (IsPlaying || _userTailRunning || hole == null || d == null) return;
+            if (IsPlaying || _userTailRunning || hole == null || d == null) return false;
             StartCoroutine(UserTail(d, hole));
+            return true;
         }
 
         void HandleUserMiss(BlockDragController d, HoleGlowHighlight hole)

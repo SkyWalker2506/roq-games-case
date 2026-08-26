@@ -117,7 +117,19 @@ namespace Case2
         public float dragTiltSmoothing = 0.067f;
 
         /// <summary>Raised when a drop (real pointer or simulated) lands on a hole that matches this block.</summary>
-        public event Action<BlockDragController, HoleGlowHighlight> OnUserDrop;
+        /// <summary>
+        /// A matching drop. Returns whether the listener ACTUALLY TOOK IT.
+        ///
+        /// This used to be an Action and the release path returned unconditionally after raising it.
+        /// Case2Director.HandleUserDrop refuses a drop while a sequence or an earlier tail is still
+        /// running - and when it did, nothing happened at all: the block was neither delivered nor
+        /// sent home, so it hung in mid-air exactly where the player let go and the game looked
+        /// broken. "birde biraktigimiz yerde kaliyor... oturmazsa eski yerine donmesi gerekmiyor mu."
+        ///
+        /// A Func makes the refusal visible to the caller, which can then do the same thing it does
+        /// for a miss. A listener that returns false is saying "not now", not "delivered".
+        /// </summary>
+        public event Func<BlockDragController, HoleGlowHighlight, bool> OnUserDrop;
 
         /// <summary>Raised when a drop misses: empty board, or a hole this block does not fit.</summary>
         public event Action<BlockDragController, HoleGlowHighlight> OnUserMiss;
@@ -833,8 +845,10 @@ namespace Case2
 
             if (match)
             {
-                Action<BlockDragController, HoleGlowHighlight> handler = OnUserDrop;
-                if (handler != null) { handler(this, hole); return; }
+                Func<BlockDragController, HoleGlowHighlight, bool> handler = OnUserDrop;
+                if (handler != null && handler(this, hole)) return;
+                // Refused - a sequence is mid-flight. Fall through to the same return-home the miss
+                // path takes, rather than leaving the piece parked in the air.
             }
 
             Action<BlockDragController, HoleGlowHighlight> missed = OnUserMiss;
