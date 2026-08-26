@@ -1179,6 +1179,22 @@ namespace Case3
             Vector3 drawnHome = peel.VisualWorldCentre(9);
             Vector3 peelEdgeHome = peel.AnchoredEdgeWorld();
 
+            // LIFT THE SHEET ABOVE THE PAGE BEFORE IT PEELS, not when it flies.
+            //
+            // The shader lays the peeled flap FLAT and MIRRORED once it has wrapped past _MaxAngle -
+            // that is the big white back the reference shows. Ours drew it too, and then the page drew
+            // over it: the sheet still carried its own page sorting order (~140) while the stickers it
+            // folds across sit higher, so all that was left visible was the sliver that happened to
+            // clear its neighbours.
+            //
+            // Measured on the owner's two clips: the reference's white area on the page goes 47,300 ->
+            // 93,100 px through the peel; ours went 36,400 -> 37,000. Not a missing flap - a buried one.
+            //
+            // Fifth sorting bug of this shape today, and the same fix: derive the order at the moment
+            // it is needed instead of leaving the one that was right when the sheet was lying flat.
+            cur.sticker.sortingOrder = CarrySortingOrder();
+            peel.SyncMeshSorting();
+
             while (SequenceClock < _t0 + tPeel)
             {
                 float k = Mathf.Clamp01((SequenceClock - _t0 - tTap) / Mathf.Max(0.0001f, peelDuration));

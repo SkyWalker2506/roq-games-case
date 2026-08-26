@@ -98,7 +98,7 @@ namespace Case3
         // NonSerialized: Stickerdom.unity carries 0.105 on most stickers (and 0.34 on two, which are
         // the ones that already looked closest), and a serialized field is read from the SCENE. Fifth
         // time today; the scene is the owner's and not ours to write.
-        [System.NonSerialized] public float radiusFactor = 0.38f;
+        [System.NonSerialized] public float radiusFactor = 0.105f;
 
         [Tooltip("Wrap is clamped here. EXACTLY pi and nothing else: at pi cos(theta) = -1, so the flap " +
                  "past the roll is a rigid 1:1 mirror of the sheet and the peeled paper keeps the " +
