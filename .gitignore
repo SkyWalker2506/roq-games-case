@@ -49,3 +49,7 @@ tools/
 
 # Case brief supplied by ROQ - not ours to redistribute
 docs/Game Developer Case - ROQ Games.pdf
+
+# working notes and measurement tooling - not part of the delivered project
+docs/
+tools/
