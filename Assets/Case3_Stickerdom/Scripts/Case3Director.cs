@@ -132,6 +132,12 @@ namespace Case3
         public float flightDuration = 0.35f;
         [Tooltip("Flip back to the printed face. Timed against the reference at 0.12 s.")]
         public float flipDuration = 0.12f;
+
+        /// <summary>
+        /// How much curl is left when the sheet reaches its card. The rest of the unwind happens in
+        /// flight, so the landing is a press rather than a flip.
+        /// </summary>
+        const float FlightEndCurl = 0.14f;
         [Tooltip("Overshoot pop as the sticker meets the page.")]
         public float popDuration = 0.11f;
         [Tooltip("Ring-out after the pop; the reference never ends a sequence dead.")]
@@ -1209,9 +1215,17 @@ namespace Case3
                 // page items that are authored at an angle.
                 _stickerTf.rotation = Quaternion.Slerp(cur.HomeRotation, restRotation, e);
 
-                // The reference keeps the blank, curled paper back visible for the whole flight.
-                // The printed face is revealed only once the sheet reaches its card.
-                peel.SetProgress(peelEnd);
+                // OPEN ON THE WAY, do not flip on arrival.
+                //
+                // This used to hold peelEnd (0.96) for the entire flight and then flatten in 0.12 s,
+                // which reads as the sheet snapping over at the last instant - the owner: "sanki flip
+                // oluyor gibi". A sticker is not flipped onto its page; it arrives already open and is
+                // pressed down.
+                //
+                // The unwind is front-loaded (k^0.6) so most of it happens while the sheet is still
+                // travelling and it is nearly flat well before it lands. A little curl is left for the
+                // press beat to take out, so the landing still has something to resolve.
+                peel.SetProgress(Mathf.Lerp(peelEnd, FlightEndCurl, Mathf.Pow(k, 0.6f)));
 
                 Vector3 want = flight.Evaluate(drawnLaunch, restCentre, e);
                 PlaceDrawnAt(peel, want);
@@ -1223,7 +1237,7 @@ namespace Case3
 
             _stickerTf.localScale = flightEndScale;
             _stickerTf.rotation = restRotation;
-            peel.SetProgress(peelEnd);
+            peel.SetProgress(FlightEndCurl);
             PlaceDrawnAt(peel, restCentre);
             TraceMark("flight-end");
             EndStep();
@@ -1231,7 +1245,7 @@ namespace Case3
             // ---------------------------------------------------------- 3. flip back to the printed face
             BeginStep("flip");
             Fire(JuiceEvent.Deform,
-                 "the white paper back flips flat at the target and reveals the printed reward face");
+                 "the last of the curl is pressed out and the sheet beds down onto the card");
 
             // The sheet is at its slot now. The curl is about to unwind back to progress 0, and the
             // contact shadow keys off progress, so without this it would fade straight back IN on top of
@@ -1243,8 +1257,12 @@ namespace Case3
                 float k = Mathf.Clamp01((SequenceClock - _t0 - tFlight) / Mathf.Max(0.0001f, flipDuration));
                 float e = Ease.Evaluate(EaseType.OutCubic, k);
 
-                peel.SetProgress(Mathf.Lerp(peelEnd, 0f, e));
-                _stickerTf.localScale = Vector3.Lerp(flightEndScale, slotScale * 0.99f, Ease.Evaluate(EaseType.OutQuad, k));
+                peel.SetProgress(Mathf.Lerp(FlightEndCurl, 0f, e));
+                // Press, not shrink: the sheet dips slightly under its settled size and comes back,
+                // which is what a thumb smoothing a sticker down looks like. The old lerp only ever
+                // approached 0.99 from above, so the beat had no contact in it.
+                float press = 1f - 0.045f * Mathf.Sin(k * Mathf.PI);
+                _stickerTf.localScale = Vector3.Lerp(flightEndScale, slotScale, Ease.Evaluate(EaseType.OutQuad, k)) * press;
                 // Re-anchored EVERY frame of the unwind. The curl offset collapses as the paper
                 // flattens, and holding the transform still while that happens is precisely what used
                 // to drag the drawn sheet 1.18 u across the album in 27 ms. Pinning the DRAWN centre
