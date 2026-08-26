@@ -39,6 +39,11 @@ Shader "Case1/SoftPlastic"
         // the SDF's curvature, so it follows whatever shape the socket is - four corners on a
         // square, three on a triangle, ten on a star - instead of being told where to look.
         _IndentCornerSink("Indent Corner Sink", Range(0, 2)) = 0.9
+        // Darkening laid exactly on the line where the wall turns into the floor. Without it the
+        // wall and the floor are the same tone where they meet and read as one surface - the owner:
+        // "birlesim yerleri curvlu olup ayrismali", "yapisiklar". Contact shadow is what separates
+        // two planes that touch; the curve alone cannot, because a smooth join has no edge to see.
+        _IndentCreaseAO("Indent Crease Shadow", Range(0, 1)) = 0.55
         _IndentFloorDarken("Indent Floor Darkness", Range(0, 1.0)) = 0.72
         // MEASURED off Fit The Shape.mp4 f_010. The reference socket is not a scaled copy of the
         // cell colour: inset/face per channel reads (0.272, 0.006, 0.000) on the orange cell and
@@ -193,6 +198,7 @@ Shader "Case1/SoftPlastic"
             float _IndentDepth;
             float _IndentBevel;
             float _IndentCornerSink;
+            float _IndentCreaseAO;
             float _IndentFloorDarken;
             float _CavityBounce;
             float _CavityLightKill;
@@ -307,6 +313,7 @@ Shader "Case1/SoftPlastic"
                 // 1 outside the socket; driven down inside it so the additive highlight terms
                 // below cannot put a pedestal under a base the cavity has already crushed.
                 half cavityAtten = 1.0h;
+                half creaseShade = 1.0h;   // contact shadow on the wall/floor and face/wall joins
                 // White inside and out until a socket opts in; tints the ADDITIVE terms only.
                 half3 cavityTint = half3(1.0h, 1.0h, 1.0h);
                 half3 faceAlbedo = baseRGB;   // saved before the cavity crushes it
@@ -374,6 +381,22 @@ Shader "Case1/SoftPlastic"
                     // the socket's silhouette, and the reference's does not.
                     slope *= 1.0 + corner * _IndentCornerSink;
 
+                    // WHERE THE WALL MEETS THE FLOOR, and where the face meets the wall.
+                    //
+                    // The profile already joins these smoothly - smoothstep has zero slope at both
+                    // ends, so the wall's foot is tangent to the floor and the face's lip is tangent
+                    // to the wall. That is the curve. But a tangent join has no edge, and with both
+                    // sides lit the same it reads as one continuous surface, which is why they look
+                    // stuck together.
+                    //
+                    // So the join gets a contact shadow instead of a crease: darkest exactly on the
+                    // line, fading both ways. Two planes that touch are separated by the shadow in
+                    // the corner between them, not by a hard edge - and this keeps the geometry
+                    // smooth while making the junction legible.
+                    float foot = (dist < 0.0) ? smoothstep(0.55, 1.0, saturate(-dist / ww)) : 0.0;
+                    float lip  = (dist >= 0.0) ? smoothstep(0.55, 1.0, saturate(dist / bw)) : 0.0;
+                    creaseShade = (half)(1.0 - _IndentCreaseAO * (foot * 0.85 + lip * 0.35));
+
                     // Perturbed Object Space normal (deep steep carved inward socket)
                     float3 N_OS = normalize(float3(grad.x * slope * 3.2f, 1.0f, grad.y * slope * 3.2f));
                     normalWS = normalize(TransformObjectToWorldNormal(N_OS));
@@ -428,7 +451,11 @@ Shader "Case1/SoftPlastic"
                 // Rounded bevel normals with rich toy contrast
                 half facing = saturate(dot(normalWS, viewDir));
                 half bevel = lerp(1.0h - _BevelDarken, 1.0h, smoothstep(-0.08h, 1.02h, facing));
-                half3 colour = baseRGB * diffuse * bevel;
+                // Contact shadow on the two junction lines - the wall's foot and the face's lip.
+                // Applied to the diffuse base only, so the specular that runs along the curve still
+                // catches the light and the join reads as a rounded corner rather than a painted
+                // line.
+                half3 colour = baseRGB * diffuse * bevel * creaseShade;
 
                 // Glossy plastic specular highlight (curved highlight on top face and top bevel)
                 half3 halfVector = SafeNormalize(keyDir + viewDir);

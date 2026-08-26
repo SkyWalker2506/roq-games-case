@@ -68,6 +68,7 @@ Material:
     - _DstBlendAlpha: 0
     - _EdgeInk: 0.25
     - _EdgeInkWidth: 3
+    - _IndentCreaseAO: 0.55
     - _IndentCornerSink: 0.9
     - _IndentBevel: 0.075
     - _IndentDepth: 0.18

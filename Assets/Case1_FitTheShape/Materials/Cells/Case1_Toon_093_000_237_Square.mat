@@ -34,6 +34,7 @@ Material:
     - _CavityLightKill: 0.7
     - _EdgeInk: 0.45
     - _EdgeInkWidth: 4.5
+    - _IndentCreaseAO: 0.55
     - _IndentCornerSink: 0.9
     - _IndentBevel: 0.065
     - _IndentDepth: 0.18
