@@ -1632,7 +1632,15 @@ public static class Case1SceneSetup
         m.SetFloat("_RimLift",           isPiece ? 0.10f : (isCell ? 0.02f : 0.00f));
         m.SetFloat("_EdgeInk",           isPiece ? 0.45f : 0.25f);
         m.SetFloat("_EdgeInkWidth",      isPiece ? 4.5f : 3.0f);
-        m.SetFloat("_OutlineWidth",      0f);
+        // The silhouette outline the reference blocks carry. Pieces only: the board cells sit
+        // shoulder to shoulder and a contour on each would draw a grid, which the reference has not.
+        // Zero here since the first commit, alongside a shader that never had an outline pass to
+        // read it - the property and the effect were both missing, not just switched off.
+        // Silhouette outline on every solid shape; none on the cavities. A hole is an absence, and
+        // an inverted-hull outline on one draws a ring where the reference has an opening.
+        m.SetFloat("_OutlineWidth",      (isWall || plate) ? 0f : 0.009f);
+        m.SetFloat("_OutlineScaleMin", 0.80f);
+        m.SetFloat("_OutlineScaleMax", 0.95f);
         m.SetFloat("_VertShade",         isPiece ? 0.45f : 0.20f);
         m.SetFloat("_VertShadeBias",     0.0f);
         m.SetFloat("_BottomDarken",      isPiece ? 0.58f : (isCell ? 0.35f : 0.50f));

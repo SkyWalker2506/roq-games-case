@@ -35,7 +35,9 @@ Material:
     - _EdgeInkWidth: 3
     - _OffsetFactor: 0
     - _OffsetUnits: 0
-    - _OutlineWidth: 0.016
+    - _OutlineScaleMax: 0.95
+    - _OutlineScaleMin: 0.8
+    - _OutlineWidth: 0.009
     - _RimLift: 0
     - _ShadeMul: 0.8
     - _ShadeStep: 0.1

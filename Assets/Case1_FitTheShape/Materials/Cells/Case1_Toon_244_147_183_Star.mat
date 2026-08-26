@@ -46,7 +46,9 @@ Material:
     - _IndentWall: 0.185
     - _OffsetFactor: 0
     - _OffsetUnits: 0
-    - _OutlineWidth: 0
+    - _OutlineScaleMax: 0.95
+    - _OutlineScaleMin: 0.8
+    - _OutlineWidth: 0.009
     - _RimLift: 0.02
     - _ShadeStrength: 0.22
     - _ShapeType: 4

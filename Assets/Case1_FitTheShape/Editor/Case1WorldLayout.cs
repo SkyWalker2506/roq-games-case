@@ -67,11 +67,14 @@ public static class Case1WorldLayout
     /// </summary>
     const float BackRowHeightRatio = 0.73f;
     /// <summary>
-    /// Depth between tray rows, in board cell pitches. At 1.15 the rows stepped back by less than a
-    /// tile's own width and, seen down a 15 degree camera, they overlapped into one clump. A row needs
-    /// to clear the one in front of it, so the pitch is close to twice the tile.
+    /// Depth between tray rows, in board cell pitches.
+    ///
+    /// 1.55. At 1.15 the rows stepped back by less than a tile's own width and, down a 15 degree
+    /// camera, clumped into one; 1.95 cleared that and then some - "bu arasindaki boslugu azalt,
+    /// biraz cok uzaklar". A row still has to clear the one in front of it, and 1.55 is a full half
+    /// tile of daylight between them rather than a whole one.
     /// </summary>
-    const float TrayRowPitch = 1.95f;
+    const float TrayRowPitch = 1.55f;
     /// <summary>
     /// Depth of the FRONT tray row, in board cell pitches. At 3.40 the tray sat almost under the lens
     /// and fell out of the bottom of the frame; it belongs out in front of the cabinet, not at the
@@ -244,13 +247,18 @@ public static class Case1WorldLayout
             if (slot < 0) continue;
             int row = slot / 3, col = slot % 3;
 
-            ShapeId id;
-            // Straight, with one deliberate exception: a hexagon is turned 30 degrees in its own plane
-            // so a flat edge does not face the viewer. Every row gets the same angle - the rows differ
-            // in height and in nothing else.
-            t.rotation = ShapeIds.TryParse(t.name, out id) && id == ShapeId.Hexagon
-                       ? Quaternion.Euler(0f, 30f, 0f)
-                       : Quaternion.identity;
+            // Straight, with one deliberate exception: a hexagon is turned so a VERTEX faces the
+            // viewer rather than a flat edge - "altigenler en tepedeki gibi asagi dik noktasi bakacak
+            // sekilde".
+            //
+            // The mesh is built as Ngon(6, 90), which already puts a vertex at the top and one at the
+            // bottom. The old 30 degrees turned that INTO the flat-edge orientation, which is the
+            // opposite of what its own comment claimed it was for. Zero leaves the authored
+            // point-down hexagon alone.
+            //
+            // Every row gets the same angle and always did, so a scene where two rows disagree got
+            // that from the saved file, not from here - this pass has to be re-run for it to bite.
+            t.rotation = Quaternion.identity;
             t.localScale = frontScale;
 
             // Row 0 sits nearest the board, so it is FURTHEST from the camera; the rows step toward the

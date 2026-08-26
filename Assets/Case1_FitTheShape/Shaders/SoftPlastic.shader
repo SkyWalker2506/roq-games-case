@@ -11,7 +11,13 @@ Shader "Case1/SoftPlastic"
         _RimLift("Edge Lift", Range(0,0.35)) = 0.12
         _EdgeInk("Silhouette Ink", Range(0,1)) = 0.35
         _EdgeInkWidth("Silhouette Ink Width", Range(1,12)) = 4.5
-        _OutlineWidth("Outline Width", Range(0,0.08)) = 0
+        _OutlineWidth("Outline Width", Range(0,0.08)) = 0.009
+        // Only the pieces at the FRONT of the tray carry a line. The rows differ by scale - the back
+        // row is authored at 0.73 of the front's height - so the scale IS the row, and gating on it
+        // needs no per-object wiring at all: a piece that grows as it comes forward fades its line in
+        // on the way, which is what the owner asked for.
+        _OutlineScaleMin("Outline Fade Start (Y scale)", Float) = 0.80
+        _OutlineScaleMax("Outline Full (Y scale)", Float) = 0.95
         _OutlineColor("Outline Colour", Color) = (0.06,0.05,0.12,1)
         // MEASURED off CASE1_TEPSI.png: six-row mean brightness of the drum reads 123.5/118.3/107.7/
         // 128.2/101.4/75.3 (brightest:darkest = 1.70). Rows that curve away from the camera darken.
@@ -446,6 +452,90 @@ Shader "Case1/SoftPlastic"
                 colour *= lerp(1.0h, 1.0h - _EdgeInk, saturate(edge));
 
                 return half4(colour, _BaseColor.a);
+            }
+            ENDHLSL
+        }
+
+        // ------------------------------------------------------------------ silhouette outline
+        //
+        // _OutlineWidth and _OutlineColor have been declared in this shader since the first commit
+        // and NOTHING ever read them - no pass, no fragment use, the width defaulting to 0. So the
+        // dark contour the reference blocks carry has never been drawn by us; this is an addition,
+        // not a restoration, and I checked the history rather than assuming a regression.
+        //
+        // Inverted hull, which is the right tool for a solid the camera sees in 3D: draw the mesh a
+        // second time, push every vertex out along its normal, keep only the FRONT-culled faces and
+        // paint them flat. What survives is exactly the silhouette, a constant band wide, and it
+        // costs one extra draw with no depth trickery.
+        //
+        // The extrusion is scaled by the clip-space w so the band holds its width on screen instead
+        // of growing with the piece's distance - the shapes sit at different depths on the tray and
+        // an object-space extrusion would give the near ones a fatter line than the far ones.
+        Pass
+        {
+            Name "SoftPlasticOutline"
+            Tags { "LightMode"="SRPDefaultUnlit" }
+            Cull Front
+            ZWrite On
+
+            HLSLPROGRAM
+            #pragma vertex vertOutline
+            #pragma fragment fragOutline
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            CBUFFER_START(UnityPerMaterial)
+            float4 _BaseColor;
+            float4 _OutlineColor;
+            float _Wrap;
+            float _ShadeStrength;
+            float _Smoothness;
+            float _SpecularStrength;
+            float _BevelDarken;
+            float _RimLift;
+            float _EdgeInk;
+            float _EdgeInkWidth;
+            float _OutlineWidth;
+            float _OutlineScaleMin;
+            float _OutlineScaleMax;
+            float _CurveDarken;
+            float _VertShade;
+            float _VertShadeBias;
+            CBUFFER_END
+
+            struct OutlineAttributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS   : NORMAL;
+            };
+
+            struct OutlineVaryings
+            {
+                float4 positionCS : SV_POSITION;
+            };
+
+            OutlineVaryings vertOutline(OutlineAttributes input)
+            {
+                OutlineVaryings o;
+                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                float3 normalWS   = TransformObjectToWorldNormal(input.normalOS);
+                o.positionCS = TransformWorldToHClip(positionWS);
+
+                // Screen-constant band: nudge in clip space along the projected normal, scaled by w.
+                float3 normalCS = mul((float3x3)UNITY_MATRIX_VP, normalWS);
+                // The object's own Y scale, straight off its matrix: back-row pieces are authored at
+                // 0.73 of the front's height, so this is the row without anyone passing it in.
+                float yScale = length(float3(unity_ObjectToWorld[0].y, unity_ObjectToWorld[1].y, unity_ObjectToWorld[2].y));
+                float gate = smoothstep(_OutlineScaleMin, _OutlineScaleMax, yScale);
+
+                float2 offset = normalize(normalCS.xy + 1e-6) * _OutlineWidth * gate * o.positionCS.w;
+                o.positionCS.xy += offset;
+                return o;
+            }
+
+            half4 fragOutline(OutlineVaryings input) : SV_Target
+            {
+                return half4(_OutlineColor.rgb, 1.0h);
             }
             ENDHLSL
         }
