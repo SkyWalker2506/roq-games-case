@@ -150,8 +150,19 @@ namespace Case3
         public float settleDuration = 0.07f;
 
         [Header("Shape of the motion")]
-        [Tooltip("Peel amount reached at the end of the curl. Just under 1 so a rounded edge survives into the flight.")]
-        [Range(0.5f, 1f)] public float peelEnd = 0.96f;
+        /// <summary>
+        /// Peel amount reached at the end of the curl; the flip then runs this back down to 0.
+        ///
+        /// 0.75, the owner's number. At 0.96 the fold had swept past the hinge itself, so the sheet
+        /// was not a peeled corner any more - it was a fully turned-over page, and it had translated
+        /// off its own footprint to get there. Stopping at 0.75 leaves the sheet folded back over
+        /// itself with the hinge still holding.
+        ///
+        /// NonSerialized on purpose. The scene carries peelEnd: 0.96 and a serialized value outranks
+        /// the initialiser, so editing this line alone would have changed nothing - the sixth time
+        /// that has bitten this scene today.
+        /// </summary>
+        [System.NonSerialized] public float peelEnd = 0.75f;
         [Tooltip("How far the sticker lifts off the strip while it peels, in world units.")]
         public float peelLift = 0.34f;
         [Tooltip("Scale at the far end of the flight, as a fraction of the landing scale. Reference: 1.0 -> 0.6.")]
