@@ -737,19 +737,29 @@ public static class Case2SceneSetup
         Texture2D tileSheen = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Case2_BlockHole/Textures/case2_tile_sheen.png");
         Material navyA = EnsureMaterial(MaterialDir + "/Case2_BoardNavy_A.mat", "Case2/BoardTile", m =>
         {
-            m.SetColor("_BaseColor", new Color(0.175f, 0.225f, 0.420f, 1f));
+            // RE-SOLVED against the reference (0e1c47a). The old (0.175, 0.225, 0.420) was both too
+            // dark and over-saturated - measured 0.76 against the reference's 0.49 - and the chamfer
+            // was invisible: _BevelLift defaulted to 0.03, which produced an overshoot of MINUS ONE
+            // code value, so the board read as a painted texture rather than as blocks.
+            m.SetColor("_BaseColor", new Color(0.2432f, 0.2797f, 0.4053f, 1f));
             if (tileSheen != null) m.SetTexture("_SheenMap", tileSheen);
             m.SetFloat("_SheenStrength", 0.12f);
             m.SetFloat("_BevelContrast", 0.20f);
             m.SetFloat("_VerticalGrad", 0.05f);
+            m.SetFloat("_BevelLift", 0.42f);
+            m.SetFloat("_BevelLiftZ", 0.16f);
+            m.SetFloat("_ShadeWidth", 0.085f);
         });
         Material navyB = EnsureMaterial(MaterialDir + "/Case2_BoardNavy_B.mat", "Case2/BoardTile", m =>
         {
-            m.SetColor("_BaseColor", new Color(0.210f, 0.260f, 0.465f, 1f));
+            m.SetColor("_BaseColor", new Color(0.2792f, 0.3151f, 0.4249f, 1f));
             if (tileSheen != null) m.SetTexture("_SheenMap", tileSheen);
             m.SetFloat("_SheenStrength", 0.12f);
             m.SetFloat("_BevelContrast", 0.20f);
             m.SetFloat("_VerticalGrad", 0.05f);
+            m.SetFloat("_BevelLift", 0.42f);
+            m.SetFloat("_BevelLiftZ", 0.16f);
+            m.SetFloat("_ShadeWidth", 0.085f);
         });
         if (navyA == null || navyB == null) return;
 
