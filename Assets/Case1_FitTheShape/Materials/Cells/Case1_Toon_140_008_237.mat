@@ -31,6 +31,7 @@ Material:
     - _Cull: 2
     - _EdgeInk: 0.25
     - _EdgeInkWidth: 2
+    - _IndentLipStrength: 1.7
     - _IndentCreaseAO: 0.55
     - _IndentCornerSink: 0.9
     - _IndentBevel: 0.08

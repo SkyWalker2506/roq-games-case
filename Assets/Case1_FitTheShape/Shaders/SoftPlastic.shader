@@ -44,6 +44,10 @@ Shader "Case1/SoftPlastic"
         // "birlesim yerleri curvlu olup ayrismali", "yapisiklar". Contact shadow is what separates
         // two planes that touch; the curve alone cannot, because a smooth join has no edge to see.
         _IndentCreaseAO("Indent Crease Shadow", Range(0, 1)) = 0.55
+        // How hard the OUTER half of the entrance - the frame the player sees around the hole -
+        // tilts toward the opening. The inner wall keeps its own strength; this is only the lip, so
+        // the frame can be made to read without deepening the socket or moving its silhouette.
+        _IndentLipStrength("Indent Lip Strength", Range(0.5, 3)) = 1.7
         _IndentFloorDarken("Indent Floor Darkness", Range(0, 1.0)) = 0.72
         // MEASURED off Fit The Shape.mp4 f_010. The reference socket is not a scaled copy of the
         // cell colour: inset/face per channel reads (0.272, 0.006, 0.000) on the orange cell and
@@ -199,6 +203,7 @@ Shader "Case1/SoftPlastic"
             float _IndentBevel;
             float _IndentCornerSink;
             float _IndentCreaseAO;
+            float _IndentLipStrength;
             float _IndentFloorDarken;
             float _CavityBounce;
             float _CavityLightKill;
@@ -373,7 +378,7 @@ Shader "Case1/SoftPlastic"
                     if (dist < bw)
                     {
                         slope = (dist >= 0.0)
-                              ? smoothstep(0.0, 1.0, 1.0 - saturate(dist / bw))
+                              ? smoothstep(0.0, 1.0, 1.0 - saturate(dist / bw)) * _IndentLipStrength
                               : 1.0 - smoothstep(0.0, 1.0, saturate(-dist / ww));
                     }
                     // The corners sink harder. Multiplying the SLOPE rather than widening the band
@@ -395,7 +400,7 @@ Shader "Case1/SoftPlastic"
                     // smooth while making the junction legible.
                     float foot = (dist < 0.0) ? smoothstep(0.55, 1.0, saturate(-dist / ww)) : 0.0;
                     float lip  = (dist >= 0.0) ? smoothstep(0.55, 1.0, saturate(dist / bw)) : 0.0;
-                    creaseShade = (half)(1.0 - _IndentCreaseAO * (foot * 0.85 + lip * 0.35));
+                    creaseShade = (half)(1.0 - _IndentCreaseAO * (foot * 0.85 + lip * 0.55));
 
                     // Perturbed Object Space normal (deep steep carved inward socket)
                     float3 N_OS = normalize(float3(grad.x * slope * 3.2f, 1.0f, grad.y * slope * 3.2f));
