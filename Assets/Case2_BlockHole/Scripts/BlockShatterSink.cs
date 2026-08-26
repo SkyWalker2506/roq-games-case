@@ -492,13 +492,41 @@ namespace Case2
         /// </summary>
         static float FootprintDivisor(BlockShapeId id)
         {
-            switch (id)
+            string[] mask = BlockShapeIds.Mask(id);
+            if (mask == null || mask.Length == 0) return 1f;
+            // The SHORT side of the mask, because the caller divides the SHORT side of the art
+            // bounds by it. Hand-written, this returned 2 for an L - whose mask is 3 wide by 2
+            // tall, so 2 happened to be right - and 1 for a Two, whose mask is 1 by 3, where 1 is
+            // also right. It was wrong for neither, but it was a third copy of the same facts.
+            return Mathf.Max(1, Mathf.Min(mask[0].Length, mask.Length));
+        }
+
+        GameObject _spanPrefab;
+        float _spanCached = -1f;
+
+        /// <summary>
+        /// Widest XZ extent of one unit fracture at its authored scale, in world units. Measured
+        /// once and cached: it is a property of the asset, and a 90 or 180 degree yaw cannot
+        /// change max(x, z). The gauge instance is deactivated before it is handed to Destroy, so
+        /// it can never draw a frame at the origin while Destroy waits for the end of the frame.
+        /// </summary>
+        float MeasureUnitSpan(GameObject unitPrefab)
+        {
+            if (_spanCached > 0f && _spanPrefab == unitPrefab) return _spanCached;
+            float span = 1f;
+            GameObject gauge = Instantiate(unitPrefab, Vector3.zero, Quaternion.identity);
+            MeshRenderer[] rs = gauge.GetComponentsInChildren<MeshRenderer>(true);
+            if (rs.Length > 0)
             {
-                case BlockShapeId.Cross: return 3f;
-                case BlockShapeId.Square: return 2f;
-                case BlockShapeId.L: return 2f;
-                default: return 1f;
+                Bounds gb = rs[0].bounds;
+                for (int i = 1; i < rs.Length; i++) gb.Encapsulate(rs[i].bounds);
+                span = Mathf.Max(0.0001f, Mathf.Max(gb.size.x, gb.size.z));
             }
+            gauge.SetActive(false);
+            if (Application.isPlaying) Destroy(gauge); else DestroyImmediate(gauge);
+            _spanPrefab = unitPrefab;
+            _spanCached = span;
+            return span;
         }
 
         GameObject BuildProceduralFragments(Transform source, Bounds art, BlockShapeId shapeId)
@@ -507,41 +535,36 @@ namespace Case2
             root.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
 
             BlockShapeId id = shapeId != BlockShapeId.Unknown ? shapeId : BlockShapeIds.Parse(source.name);
-            float divisor;
-            Vector2[] footprint;
-            switch (id)
-            {
-                case BlockShapeId.Cross:
-                    divisor = FootprintDivisor(id);
-                    footprint = new[] { Vector2.zero, Vector2.left, Vector2.right, Vector2.up, Vector2.down };
-                    break;
-                case BlockShapeId.Square:
-                    divisor = FootprintDivisor(id);
-                    footprint = new[]
-                    {
-                        new Vector2(-0.5f, -0.5f), new Vector2(0.5f, -0.5f),
-                        new Vector2(-0.5f, 0.5f), new Vector2(0.5f, 0.5f)
-                    };
-                    break;
-                case BlockShapeId.L:
-                    divisor = FootprintDivisor(id);
-                    footprint = new[]
-                    {
-                        new Vector2(-0.5f, -0.5f), new Vector2(0.5f, -0.5f), new Vector2(0.5f, 0.5f)
-                    };
-                    break;
-                case BlockShapeId.Two:
-                    divisor = 1f;
-                    footprint = new[] { new Vector2(0f, -0.5f), new Vector2(0f, 0.5f) };
-                    break;
-                default:
-                    divisor = 1f;
-                    footprint = new[] { Vector2.zero };
-                    break;
-            }
 
-            float cell = Mathf.Min(art.size.x, art.size.z) / divisor;
-            cell = Mathf.Max(cell, 0.08f);
+            // The footprint comes from the game's own shape mask, in WORLD axes, and nowhere else.
+            //
+            // It used to come from a hand-written table sitting right here, and that table
+            // DISAGREED with the mask. Measured against each block's own drawn footprint, as the
+            // fraction of it that received any fracture material at all:
+            //
+            //     Cross   100.0%   5 cells, agreed
+            //     Square  100.0%   4 cells, agreed
+            //     L        37.5%   the table laid 3 cells in a 2x2 box; an L is 4 cells in a 3x2
+            //     Two      33.3%   the table laid 2 cells; a Two is 3
+            //
+            // and for the L a further 37.5% of a shape-area's worth of material landed OUTSIDE the
+            // shape, because three cells of the wrong size were centred on the bounds centre of a
+            // 3x2 box and straddled its cell boundaries. That is the reported symptom exactly: the
+            // hole reads flat black while the shards sit scattered on the board around it. The
+            // effect was never per-shape by intent; it was per-shape by a stale duplicate table.
+            //
+            // Placement is in world axes because that is the frame the mask is written in. The old
+            // code offset by source.right / source.forward, the block's LOCAL axes, which is a
+            // second shape-dependence hiding inside the first: Block-L carries a 180 degree yaw
+            // and Block-2 a 90 degree one, so their local frames are not the frame the mask means.
+            // Each fracture instance still inherits source.rotation, so the chunks are oriented
+            // with the block as before - only where they are PLACED changes.
+            string[] mask = BlockShapeIds.Mask(id);
+            if (mask == null || mask.Length == 0) mask = new[] { "#" };
+            int maskRows = mask.Length, maskCols = mask[0].Length;
+            float cellW = art.size.x / maskCols;      // world +x per mask column
+            float cellH = art.size.z / maskRows;      // world +z per mask row
+            float cell = Mathf.Max(0.08f, Mathf.Min(cellW, cellH));
 
             GameObject unitPrefab = unitFracturePrefab != null ? unitFracturePrefab : fracturedPrefab;
 #if UNITY_EDITOR
@@ -550,11 +573,27 @@ namespace Case2
 #endif
             if (unitPrefab != null)
             {
-                for (int f = 0; f < footprint.Length; f++)
+                // How big is one unit fracture, as instantiated and turned to face the way this
+                // block faces? Measured rather than assumed, so the piece lands on exactly one
+                // cell whatever the block's own scale or yaw is. The old expression divided by
+                // `art.size.x / divisor`, which is the cell size along ONE world axis - correct
+                // only for a shape whose bounding box is square, and Block-L's is 3x2 and
+                // Block-2's is 1x3. It also multiplied by source.lossyScale, and Block-2 carries a
+                // 1.5 on one axis, so its pieces would have come out half again too big.
+                float pieceScale = cell / MeasureUnitSpan(unitPrefab);
+
+                for (int r0 = 0; r0 < maskRows; r0++)
+                for (int c0 = 0; c0 < maskCols && c0 < mask[r0].Length; c0++)
                 {
-                    Vector3 cellPos = art.center + source.right * (footprint[f].x * cell) + source.forward * (footprint[f].y * cell);
+                    if (mask[r0][c0] != '#') continue;
+                    // Row 0 is the +z row, matching BuildArtPickRegion's own convention.
+                    Vector3 cellPos = new Vector3(
+                        art.min.x + (c0 + 0.5f) * cellW,
+                        art.center.y,
+                        art.max.z - (r0 + 0.5f) * cellH);
+
                     GameObject cellInstance = Instantiate(unitPrefab, cellPos, source.rotation);
-                    cellInstance.transform.localScale = source.lossyScale * (cell / Mathf.Max(0.01f, art.size.x / divisor));
+                    cellInstance.transform.localScale *= pieceScale;
 
                     MeshRenderer[] renderers = cellInstance.GetComponentsInChildren<MeshRenderer>(true);
                     for (int r = 0; r < renderers.Length; r++)
@@ -566,18 +605,25 @@ namespace Case2
                 return root;
             }
 
+            // Same mask, same world axes - the crude cube fallback must not disagree with the real
+            // one about which cells the shape covers.
             int index = 0;
-            for (int f = 0; f < footprint.Length; f++)
+            for (int r0 = 0; r0 < maskRows; r0++)
+            for (int c0 = 0; c0 < maskCols && c0 < mask[r0].Length; c0++)
             {
+                if (mask[r0][c0] != '#') continue;
+                float cx = art.min.x + (c0 + 0.5f) * cellW;
+                float cz = art.max.z - (r0 + 0.5f) * cellH;
                 for (int sx = 0; sx < 2; sx++)
                 for (int sz = 0; sz < 2; sz++)
                 {
                     GameObject chunk = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     chunk.name = "Chunk_" + index++;
                     chunk.transform.SetParent(root.transform, true);
-                    float ox = footprint[f].x * cell + (sx == 0 ? -0.26f : 0.26f) * cell;
-                    float oz = footprint[f].y * cell + (sz == 0 ? -0.26f : 0.26f) * cell;
-                    chunk.transform.position = art.center + source.right * ox + source.forward * oz;
+                    chunk.transform.position = new Vector3(
+                        cx + (sx == 0 ? -0.26f : 0.26f) * cell,
+                        art.center.y,
+                        cz + (sz == 0 ? -0.26f : 0.26f) * cell);
                     chunk.transform.rotation = source.rotation;
                     chunk.transform.localScale = new Vector3(cell * 0.32f, Mathf.Max(0.06f, art.size.y * 0.55f), cell * 0.32f);
                     Collider collider = chunk.GetComponent<Collider>();

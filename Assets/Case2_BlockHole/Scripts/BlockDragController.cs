@@ -311,16 +311,14 @@ namespace Case2
         /// bounding box this replaces - passing, and testing nothing.
         /// </para>
         /// </summary>
+        /// <remarks>
+        /// Forwards to <see cref="BlockShapeIds.Mask"/>, which is now the single copy. The table
+        /// used to live here, and BlockShatterSink kept a second, DIFFERENT one - see the note on
+        /// BlockShapeIds.Mask for what that cost.
+        /// </remarks>
         static string[] ShapeMask(BlockShapeId id)
         {
-            switch (id)
-            {
-                case BlockShapeId.L:      return new[] { "#..", "###" };
-                case BlockShapeId.Square: return new[] { "##", "##" };
-                case BlockShapeId.Two:    return new[] { "#", "#", "#" };
-                case BlockShapeId.Cross:  return new[] { ".#.", "###", ".#." };
-                default:                  return null;
-            }
+            return BlockShapeIds.Mask(id);
         }
 
         /// <summary>

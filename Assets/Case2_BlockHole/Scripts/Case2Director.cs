@@ -128,8 +128,7 @@ namespace Case2
                 targetHole.SetLit(true);
                 targetHole.OpenPit(0.001f);
                 sink.Shatter(drag.Block, drag.BlockRenderer, drag.BlockColor, targetHole.SnapPoint, 0.001f,
-                             (drag.ShapeId == BlockShapeId.Cross ? null : drag.fracturedPrefab),
-                             drag.CombinedBounds, drag.ShapeId);
+                             null, drag.ArtBounds, drag.ShapeId);
 
                 yield return null;
                 yield return null;
@@ -259,10 +258,25 @@ namespace Case2
 
             // The shards now have to stay alive right through the close, not vanish a third of the way
             // into the sink: the previous budget emptied the screen with a second of sequence still to run.
+            // EVERY shape composites its own footprint out of unit fractures. There is no per-shape
+            // branch left here, and that is the point: `ShapeId == Cross ? null : fracturedPrefab`
+            // meant the Cross alone ran the tuned composite path while every other shape ran
+            // whatever fracture asset its drag happened to carry. Only Drag_2 carries one, so the
+            // cyan bar was instantiating a 24-piece authored fracture built for a different mesh -
+            // no footprint composition at all - which is why it read as a soft banded pattern
+            // instead of chunks. Square and L carried none, fell through to the composite path,
+            // and were then laid out by a stale footprint table. Passing null unconditionally
+            // sends all four down the one path the reference's break actually looks like.
+            //
+            // ArtBounds, not CombinedBounds. CombinedBounds is the union of EVERY renderer under
+            // the block, inactive fracture shards and VFX pieces included, and it overshoots the
+            // drawn art by a different amount per shape: measured, Square 2.190 against an art
+            // 2.000, L 3.261 x 2.234 against 3.000 x 2.000, Two 1.153 x 3.372 against 1.000 x
+            // 3.000, Cross 3.000 exactly. Sizing the fracture cells off it is one more way for the
+            // shape to change the effect. Cross is unaffected, so its tuning is untouched.
             int shards = sink.Shatter(d.Block, d.BlockRenderer, d.BlockColor, hole.SnapPoint,
                                       shatterDuration + sinkDuration + closeDuration - 0.06f,
-                                      (d.ShapeId == BlockShapeId.Cross ? null : d.fracturedPrefab),
-                                      d.CombinedBounds, d.ShapeId);
+                                      null, d.ArtBounds, d.ShapeId);
             d.SetVisible(false);
 
             if (record)
