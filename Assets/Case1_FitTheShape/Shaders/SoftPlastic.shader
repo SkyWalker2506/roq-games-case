@@ -518,11 +518,28 @@ Shader "Case1/SoftPlastic"
             {
                 OutlineVaryings o;
                 float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
-                float3 normalWS   = TransformObjectToWorldNormal(input.normalOS);
                 o.positionCS = TransformWorldToHClip(positionWS);
 
-                // Screen-constant band: nudge in clip space along the projected normal, scaled by w.
-                float3 normalCS = mul((float3x3)UNITY_MATRIX_VP, normalWS);
+                // RADIAL, not the vertex normal - and that is what fixes the star.
+                //
+                // An inverted hull pushed along the normal breaks wherever the surface is concave:
+                // at the star's five notches the two adjacent side faces have normals more than 90
+                // degrees apart, so the extruded faces cross each other and the band tears. No
+                // amount of width tuning helps, because the failure is the direction field being
+                // discontinuous there.
+                //
+                // These pieces are extruded flat shapes seen from above, so their silhouette IS the
+                // XZ outline, and pushing every vertex away from the piece's own axis is a
+                // CONTINUOUS field over that outline - concave or not, neighbouring vertices always
+                // move in nearly the same direction and nothing can cross. Near the axis, where the
+                // radial direction is undefined and the vertex is not on the silhouette anyway, it
+                // falls back to the normal.
+                float3 radialOS = float3(input.positionOS.x, 0.0, input.positionOS.z);
+                float  r        = length(radialOS);
+                float3 dirOS    = r > 1e-4 ? radialOS / r : input.normalOS;
+                float3 dirWS    = normalize(TransformObjectToWorldDir(dirOS));
+
+                float3 normalCS = mul((float3x3)UNITY_MATRIX_VP, dirWS);
                 // The object's own Y scale, straight off its matrix: back-row pieces are authored at
                 // 0.73 of the front's height, so this is the row without anyone passing it in.
                 float yScale = length(float3(unity_ObjectToWorld[0].y, unity_ObjectToWorld[1].y, unity_ObjectToWorld[2].y));
