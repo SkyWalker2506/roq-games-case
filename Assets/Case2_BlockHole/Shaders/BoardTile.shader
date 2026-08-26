@@ -30,6 +30,16 @@ Shader "Case2/BoardTile"
         _BevelContrast("Bevel Contrast (legacy, unused)", Range(0, 1)) = 0.20
         _VerticalGrad("Board Vertical Gradient", Range(0, 0.5)) = 0.05
 
+        // The tiles are deep cubes so a rising one has a real side wall to show. A deep cube also
+        // hangs below the board, and the board's border is only 0.08 units tall, so the bodies were
+        // plainly visible underneath. Thickening the border to cover them turns it into a slab, so
+        // the body is clipped instead: nothing below this world height is drawn at all.
+        //
+        // The tray floor is the frame's own underside, -0.02. At rest that leaves the same sliver of
+        // tile that was visible before; during the rise the wall above the floor grows, which is the
+        // whole point of the depth.
+        _ClipMinY("Clip Below World Y", Float) = -0.02
+
         // Grout groove. _SeamWidth is the FLAT floor half-width; _SeamSoft is the ramp out of
         // it. Reference groove: ~4.2% of the cell at half depth, floor at 0.53x the face.
         _SeamWidth("Grout Floor Half-Width (cell fraction)", Range(0.002, 0.08)) = 0.022
@@ -97,6 +107,7 @@ Shader "Case2/BoardTile"
             float _GradZ;
             float _FaceLevel;
             float _ShadowStrength;
+                float  _ClipMinY;
             CBUFFER_END
 
             struct Attributes
@@ -124,6 +135,9 @@ Shader "Case2/BoardTile"
 
             half4 frag(Varyings input) : SV_Target
             {
+                // Before any shading work: the part of the cube below the tray floor does not exist.
+                clip(input.positionWS.y - _ClipMinY);
+
                 // Per-tile UV in OBJECT space. Every Tile_i_j is its own unit cube sitting on a
                 // cell centre, so positionOS.xz + 0.5 is an exact [0..1] cell. This must not go
                 // back to frac(positionWS.xz): the Board root carries a 0.5 z offset, which put

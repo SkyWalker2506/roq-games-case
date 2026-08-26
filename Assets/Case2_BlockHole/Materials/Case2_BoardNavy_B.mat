@@ -103,6 +103,7 @@ Material:
     - _SeamWidth: 0.022
     - _SeamSoft: 0.02
     - _SeamDarkness: 0.55
+    - _ClipMinY: -0.02
     - _Round: 0.11
     - _BevelRise: 0.018
     - _BevelWidth: 0.085
