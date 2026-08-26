@@ -499,6 +499,40 @@ namespace Case3
         }
 
         /// <summary>
+        /// Where the sheet actually READS on screen, in world x/y.
+        ///
+        /// This is not <c>sticker.transform.position</c> and it must not be measured as if it were.
+        /// Between the transform and the pixels sit TWO more position channels, and both of them move
+        /// on their own clock:
+        ///   1. <c>_meshTf.localPosition</c>, written by <see cref="SetProgress"/> from
+        ///      <c>centroidCompensation</c>. It slides back to zero as the curl unwinds, which is a
+        ///      real lateral move of the drawn sheet AFTER the flight has already ended.
+        ///   2. the curl geometry itself, which rolls the paper to one side of its own anchor.
+        /// A trace taken off the transform alone therefore reads clean over a landing the player sees
+        /// drift. The AABB centre of the mesh, sampled through the same <see cref="StickerMeshBuilder.Curl"/>
+        /// the shader runs, contains all three channels, so this is the only honest place to measure
+        /// "did the sticker stop moving".
+        ///
+        /// Never builds: an unprepared sheet answers with its flat sprite bounds rather than
+        /// allocating a mesh inside a measurement call.
+        /// </summary>
+        public Vector3 VisualWorldCentre(int samples = 9)
+        {
+            if (_meshMode && _built && _renderer != null && _meshTf != null)
+            {
+                Bounds cb = CurlWorldBounds(samples);
+                return new Vector3(cb.center.x, cb.center.y, 0f);
+            }
+            if (sticker != null)
+            {
+                Bounds sb = sticker.bounds;
+                return new Vector3(sb.center.x, sb.center.y, 0f);
+            }
+            Vector3 p = transform.position;
+            return new Vector3(p.x, p.y, 0f);
+        }
+
+        /// <summary>
         /// Marks the sheet as placed: it has arrived at its slot and is about to unwind flat there. The
         /// contact shadow must not reappear as the curl flattens, so this is called once, on entering the
         /// flip, and is cleared only by <see cref="ResetInstant"/>.
