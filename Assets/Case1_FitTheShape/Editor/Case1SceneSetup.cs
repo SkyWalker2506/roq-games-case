@@ -1652,7 +1652,7 @@ public static class Case1SceneSetup
         // Heightmap shape indentation parameters
         int shapeVal = (int)shapeId;
         m.SetFloat("_ShapeType", (float)shapeVal);
-        m.SetFloat("_IndentDepth", 0.4f);
+        m.SetFloat("_IndentDepth", 0.18f);
         // 0.065 -> 0.035: the socket edge was ramping over 10.3-11.8% of the socket's own width
         // against the reference's 3.0-7.3%, so the recess read as a soft dish rather than a cut.
         // This trades against the bevel ring (I3), which is the one signature separating a socket
@@ -1717,7 +1717,7 @@ public static class Case1SceneSetup
         bool hasSocket = shapeId != (ShapeId)0 && !glyph && !plate && !path.Contains("Case1_Playable_");
         m.SetFloat("_IndentWall", hasSocket ? 0.185f : 0f);
         m.SetFloat("_CavityCrease", hasSocket ? 0.57f : 0f);
-        m.SetFloat("_IndentFloorDarken", 0.86f);
+        m.SetFloat("_IndentFloorDarken", 0.74f);
 
         // ---- socket cavity: CODE OWNS ALL FOUR, deliberately ----
         // These four used to live only in the .mat assets (_CavityBounce 10.2, _CavityLightKill 0.7)
@@ -1777,7 +1777,7 @@ public static class Case1SceneSetup
         // still (6.0 -> 3.8). The "green socket reads near-black" complaint is made worse by this,
         // and is not addressed here.
         m.SetFloat("_CavityFloorExtra", hasSocket ? 0.37f : 0f);
-        m.SetFloat("_IndentInnerShadow", 0.95f);
+        m.SetFloat("_IndentInnerShadow", 0.68f);
         // USER: "case 1 de gocuk daha belirgin olsun". Every ratio INSIDE the socket was already in
         // the reference band - floor darkness, edge ramp, ring, hue, flatness - and he still could not
         // see it, because none of those measure how big the socket is relative to its cell. MEASURED on

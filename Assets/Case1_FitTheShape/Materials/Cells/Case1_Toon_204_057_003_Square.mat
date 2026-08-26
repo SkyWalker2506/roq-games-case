@@ -42,9 +42,9 @@ Material:
     - _IndentCreaseAO: 0.18
     - _IndentCornerSink: 0.9
     - _IndentBevel: 0.032
-    - _IndentDepth: 0.4
-    - _IndentFloorDarken: 0.86
-    - _IndentInnerShadow: 0.95
+    - _IndentDepth: 0.18
+    - _IndentFloorDarken: 0.74
+    - _IndentInnerShadow: 0.68
     - _IndentScale: 1.28
     - _IndentWall: 0.185
     - _OffsetFactor: 0
