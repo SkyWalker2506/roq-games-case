@@ -74,6 +74,55 @@ namespace Case4
         public float trailEmissionRate = 30f;
         public float trailScale = 0.65f;
         public float trailLifetime = 0.27f;
+
+        // ---------------------------------------------------------------- trail, measured
+        // Owner: "arkadan gelen izde daha farkli. soldakine daha benzer yap." What ours drew was a
+        // white bloom smear plus a tidy column of identical four-pointed stars at even spacing - an
+        // authored pattern, not speed. What the reference draws, measured off Buca.mp4 frame n=30
+        // (1080x1728, puck screen diameter d = 82 px, .plan-build/cli/case4-puck/trail.py):
+        //
+        //   streak   ONE component attached to the puck, 88 x 177 px. Strongly warm (R-B > 20) for
+        //            0.80 d behind the puck and faintly warm to about 2.1 d; 56 px wide at its base
+        //            (0.68 d) and tapering to nothing. Peak colour walks
+        //            (253,250,173) -> (250,198,162) -> (243,180,153) -> (188,150,145) -> floor:
+        //            pale and hot where it leaves the puck, saturated orange through the body,
+        //            desaturating to warm grey at the tail.
+        //   droplets 9 to 13 SEPARATE round components, aspect ~1.0, diameters 3..14 px
+        //            (0.037 d .. 0.171 d - a 4.7x spread, not one repeated sprite), spread from
+        //            2.0 d to 4.45 d behind the puck, scattered off the flight line by up to
+        //            +120 px (1.46 d) on both sides, dimming toward the floor colour with distance.
+        //
+        // Ours, same script, same frame scale, on .plan-build/verify/Buca/frame_100.png: 5 star
+        // components at 1.41 / 2.01 / 2.61 / 3.25 / 3.88 d - even 0.6 d steps - all within a few px
+        // of the flight line, one size, and NO warm streak at all.
+        //
+        // The fields below are what those readings turn into. Lengths are expressed as a multiple
+        // of the puck's world diameter and converted with the live launch speed, because the trail
+        // in world simulation space is (speed x lifetime) long: a length in puck-diameters is the
+        // thing the reference actually holds constant, seconds are not.
+        [Header("Trail shaped against the reference (see the block above this in source)")]
+        [Tooltip("Puck diameters behind the puck that the warm streak covers. MEASURED 2.1 d for " +
+                 "the faint tail; the strongly-warm core is 0.80 d and falls out of the size and " +
+                 "alpha ramps rather than being a second number.")]
+        public float streakLengthInDiameters = 2.1f;
+        [Tooltip("Streak width at the puck as a fraction of the puck diameter. MEASURED 0.68.")]
+        public float streakWidthInDiameters = 0.68f;
+        [Tooltip("Nearest and furthest droplet, in puck diameters behind the puck. MEASURED 2.0 " +
+                 "and 4.45.")]
+        public Vector2 dropletSpanInDiameters = new Vector2(2.0f, 4.45f);
+        [Tooltip("Droplet diameter range as a fraction of the puck diameter. MEASURED 0.037..0.171 " +
+                 "-- what matters is that the RANGE is ~4.7x, not one repeated size.")]
+        public Vector2 dropletSizeInDiameters = new Vector2(0.037f, 0.171f);
+        [Tooltip("Droplets alive at once. MEASURED 9..13 warm components in the reference frame.")]
+        public int dropletCount = 11;
+        [Tooltip("Sideways wander of a droplet off the flight line, in puck diameters. The reference " +
+                 "reaches 1.46 d on its widest straggler; CHOSEN lower - see the report - because " +
+                 "throwing ours that wide at this launch speed puts droplets through the rail.")]
+        public float dropletScatterInDiameters = 0.55f;
+        [Tooltip("World diameter of the drawn puck. Used only to convert the trail's " +
+                 "puck-diameter units into world units; read off the renderer at Awake when it can " +
+                 "be, this is the fallback.")]
+        public float puckDrawnDiameter = 1.306f;
         public float stretchAmount = 0.10f;
         public float bounceSquash = -0.10f;
 
@@ -496,64 +545,239 @@ namespace Case4
             }
 
             if (_trail != null || starTrailPrefab == null || puck == null) return;
+
+            float d = ResolveDrawnDiameter();
+            float speed = Mathf.Max(1f, launchSpeed);
+
+            // ---------------------------------------------------------------- droplets
+            // Round, soft, and of MANY sizes. The four-pointed star sprite is what made ours read
+            // as an authored marker rather than as thrown-off material, so this layer takes the
+            // soft-circle material too; the two layers now differ by size, lifetime and colour
+            // ramp, which is what separates them in the reference as well.
             GameObject go = Instantiate(starTrailPrefab, puck);
             go.name = "PuckStarTrail";
             go.transform.localPosition = Vector3.zero;
             go.transform.localRotation = Quaternion.identity;
-            go.transform.localScale = Vector3.one * trailScale;
+            go.transform.localScale = Vector3.one;   // sizes below are world units, not scaled
             _trail = go.GetComponent<ParticleSystem>();
+
+            ParticleSystemRenderer dropRenderer = go.GetComponent<ParticleSystemRenderer>();
+            if (dropRenderer != null && trailGlowMaterial != null)
+                dropRenderer.sharedMaterial = trailGlowMaterial;
 
             if (_trail != null)
             {
-                // World space or the stars travel with the puck and there is no streak at all. Short
-                // lifetime: the reference trail is a couple of sparks, not a chain of dots that reads
-                // as "animated markers following the puck".
+                // World space or the droplets travel with the puck and there is no trail at all.
                 ParticleSystem.MainModule main = _trail.main;
                 main.simulationSpace = ParticleSystemSimulationSpace.World;
                 main.playOnAwake = false;
-                main.startLifetime = trailLifetime;
-                main.startColor = new Color(1f, 0.86f, 0.18f, 1f);
-                main.startSize = new ParticleSystem.MinMaxCurve(0.20f, 0.45f);
 
-                // Both verification passes must emit the same stars in the same places. A local fixed
-                // seed keeps this effect deterministic without touching UnityEngine.Random globally.
+                // A droplet's age IS its distance behind the puck: the system is in world space and
+                // the puck is the emitter, so a particle of age t sits speed*t behind. The furthest
+                // droplet the reference draws is 4.45 puck diameters back, so that is the longest
+                // life; the shortest is set so droplets keep arriving over the whole span rather
+                // than all expiring together.
+                float farLife = dropletSpanInDiameters.y * d / speed;
+                float nearLife = Mathf.Max(0.02f, dropletSpanInDiameters.x * d / speed);
+                main.startLifetime = new ParticleSystem.MinMaxCurve(nearLife, farLife);
+
+                // The 4.7x size spread is the point. One size is what a repeated sprite looks like.
+                main.startSize = new ParticleSystem.MinMaxCurve(
+                    dropletSizeInDiameters.x * d * trailScale,
+                    dropletSizeInDiameters.y * d * trailScale);
+                main.startColor = new Color(1f, 0.90f, 0.55f, 1f);
+                main.startSpeed = new ParticleSystem.MinMaxCurve(0.3f, dropletScatterInDiameters * d / Mathf.Max(0.01f, farLife));
+                main.gravityModifier = 0f;
+
+                // Both verification passes must emit the same droplets in the same places. A local
+                // fixed seed keeps this effect deterministic without touching UnityEngine.Random.
                 _trail.useAutoRandomSeed = false;
                 _trail.randomSeed = 0xC4A11u;
 
+                // Held count, not a rate: the reference frame has 9..13 droplets in the air, and
+                // that is the number the eye reads. Rate = count / mean life.
                 ParticleSystem.EmissionModule em = _trail.emission;
-                em.rateOverTime = trailEmissionRate;
+                em.rateOverTime = dropletCount / Mathf.Max(0.01f, 0.5f * (nearLife + farLife));
+
+                // Scatter off the flight line. A sphere, not the prefab's narrow cone: the
+                // reference's droplets sit on BOTH sides of the line and at every distance from it,
+                // which a forward cone cannot produce.
+                ParticleSystem.ShapeModule shape = _trail.shape;
+                shape.enabled = true;
+                shape.shapeType = ParticleSystemShapeType.Sphere;
+                shape.radius = Mathf.Max(0.01f, 0.16f * d);
+                shape.radiusThickness = 1f;
+
+                // Brightness falls with distance: the far droplets in the reference sample within a
+                // few units of the floor colour, the near ones are near-white gold.
+                ParticleSystem.ColorOverLifetimeModule col = _trail.colorOverLifetime;
+                col.enabled = true;
+                col.color = new ParticleSystem.MinMaxGradient(WarmDropletGradient());
+
+                ParticleSystem.SizeOverLifetimeModule sz = _trail.sizeOverLifetime;
+                sz.enabled = true;
+                sz.size = new ParticleSystem.MinMaxCurve(1f, DropletSizeCurve());
             }
 
-            // The reference has two simultaneous reads: separate warm stars and an almost continuous
-            // white bloom core. Reusing the same deterministic emitter keeps their motion coherent;
-            // the soft-circle material and denser, larger particles turn the second copy into a plume.
+            // ---------------------------------------------------------------- streak
+            // The reference's streak is a short, WIDE, warm flare welded to the puck, not a long
+            // thin line and not the white bloom ours drew. It is built from the same soft circle,
+            // emitted fast enough that consecutive particles overlap into something continuous, and
+            // ramped down in size so the shape tapers to a point behind the puck.
             if (trailGlowMaterial != null)
             {
                 GameObject glowGo = Instantiate(starTrailPrefab, puck);
                 glowGo.name = "PuckGlowTrail";
                 glowGo.transform.localPosition = Vector3.zero;
                 glowGo.transform.localRotation = Quaternion.identity;
-                glowGo.transform.localScale = Vector3.one * trailScale;
+                glowGo.transform.localScale = Vector3.one;
                 _glowTrail = glowGo.GetComponent<ParticleSystem>();
                 ParticleSystemRenderer glowRenderer = glowGo.GetComponent<ParticleSystemRenderer>();
                 if (glowRenderer != null) glowRenderer.sharedMaterial = trailGlowMaterial;
 
                 if (_glowTrail != null)
                 {
+                    float streakWidth = Mathf.Max(0.02f, streakWidthInDiameters * d * trailScale);
+                    float streakLife = Mathf.Max(0.02f, streakLengthInDiameters * d / speed);
+
                     ParticleSystem.MainModule glowMain = _glowTrail.main;
                     glowMain.simulationSpace = ParticleSystemSimulationSpace.World;
                     glowMain.playOnAwake = false;
-                    glowMain.startLifetime = Mathf.Min(0.09f, trailLifetime);
-                    glowMain.startColor = new Color(1f, 0.98f, 0.78f, 1f);
-                    glowMain.startSize = new ParticleSystem.MinMaxCurve(0.85f, 1.25f);
+                    glowMain.startLifetime = streakLife;
+                    glowMain.startColor = new Color(1f, 0.93f, 0.72f, 1f);   // pale and hot at the puck
+                    glowMain.startSize = new ParticleSystem.MinMaxCurve(streakWidth * 0.88f, streakWidth);
+                    glowMain.startSpeed = 0f;                                 // the streak is the puck's own path
+                    glowMain.gravityModifier = 0f;
 
                     _glowTrail.useAutoRandomSeed = false;
                     _glowTrail.randomSeed = 0xC4A12u;
+
+                    // Continuity condition, not a tuned number: consecutive puffs are speed/rate
+                    // apart, and they read as one streak only while that gap is small against the
+                    // puff. Six samples per puff width is the smallest that left no beading in the
+                    // capture.
                     ParticleSystem.EmissionModule glowEmission = _glowTrail.emission;
-                    glowEmission.rateOverTime = trailEmissionRate * 3.2f;
+                    glowEmission.rateOverTime = 6f * speed / streakWidth;
+
+                    ParticleSystem.ShapeModule glowShape = _glowTrail.shape;
+                    glowShape.enabled = true;
+                    glowShape.shapeType = ParticleSystemShapeType.Sphere;
+                    glowShape.radius = streakWidth * 0.12f;
+                    glowShape.radiusThickness = 1f;
+
+                    ParticleSystem.ColorOverLifetimeModule glowCol = _glowTrail.colorOverLifetime;
+                    glowCol.enabled = true;
+                    glowCol.color = new ParticleSystem.MinMaxGradient(WarmStreakGradient());
+
+                    ParticleSystem.SizeOverLifetimeModule glowSize = _glowTrail.sizeOverLifetime;
+                    glowSize.enabled = true;
+                    glowSize.size = new ParticleSystem.MinMaxCurve(1f, StreakTaperCurve());
                 }
             }
             SetTrail(false);
+        }
+
+        /// <summary>
+        /// World diameter of the DRAWN puck, read off the renderer rather than trusted from a
+        /// field: every trail length below is a multiple of it, and a puck that is later resized
+        /// must drag its trail along or the two stop matching.
+        /// </summary>
+        float ResolveDrawnDiameter()
+        {
+            Transform visual = _visual != null ? _visual : ResolveVisual();
+            if (visual != null)
+            {
+                Renderer r = visual.GetComponent<Renderer>();
+                if (r != null)
+                {
+                    Vector3 sz = r.bounds.size;
+                    float measured = Mathf.Max(sz.x, sz.z);
+                    if (measured > 0.05f) return measured;
+                }
+            }
+            return Mathf.Max(0.05f, puckDrawnDiameter);
+        }
+
+        /// <summary>
+        /// Streak colour walk, read off Buca.mp4 n=30 along the streak's centreline:
+        /// (253,250,173) at the puck, (250,198,162) and (243,180,153) through the body,
+        /// (188,150,145) at the tail, floor beyond. Pale and hot into saturated orange into warm
+        /// grey - our old streak started at (255,250,199) and simply faded, which is why it read
+        /// white.
+        /// </summary>
+        /// <summary>
+        /// The streak ramp, for the gate. The gate has to read the ramp the game actually installs
+        /// rather than a copy of it: a copy would keep passing after the real one was changed, which
+        /// is the failure mode the whole exercise is trying to avoid.
+        /// </summary>
+        public static Gradient StreakGradientForGate() { return WarmStreakGradient(); }
+
+        static Gradient WarmStreakGradient()
+        {
+            Gradient g = new Gradient();
+            g.SetKeys(
+                new GradientColorKey[]
+                {
+                    new GradientColorKey(new Color(0.992f, 0.980f, 0.678f), 0.00f),
+                    new GradientColorKey(new Color(0.980f, 0.776f, 0.635f), 0.28f),
+                    new GradientColorKey(new Color(0.953f, 0.706f, 0.600f), 0.55f),
+                    new GradientColorKey(new Color(0.737f, 0.588f, 0.569f), 1.00f),
+                },
+                new GradientAlphaKey[]
+                {
+                    new GradientAlphaKey(0.95f, 0.00f),
+                    new GradientAlphaKey(0.62f, 0.35f),
+                    new GradientAlphaKey(0.18f, 0.72f),
+                    new GradientAlphaKey(0.00f, 1.00f),
+                });
+            return g;
+        }
+
+        /// <summary>
+        /// Droplet colour walk. Sampled at the reference's droplet centroids: (252,175,95) and
+        /// (192,185,145) near the puck, (165,155,141) and (139,145,146) far out - warm gold
+        /// desaturating toward the floor rather than a constant gold that just switches off.
+        /// </summary>
+        static Gradient WarmDropletGradient()
+        {
+            Gradient g = new Gradient();
+            g.SetKeys(
+                new GradientColorKey[]
+                {
+                    new GradientColorKey(new Color(0.988f, 0.686f, 0.373f), 0.00f),
+                    new GradientColorKey(new Color(0.753f, 0.725f, 0.569f), 0.45f),
+                    new GradientColorKey(new Color(0.616f, 0.608f, 0.553f), 1.00f),
+                },
+                new GradientAlphaKey[]
+                {
+                    new GradientAlphaKey(0.00f, 0.00f),   // born inside the streak, invisible there
+                    new GradientAlphaKey(1.00f, 0.18f),
+                    new GradientAlphaKey(0.70f, 0.60f),
+                    new GradientAlphaKey(0.00f, 1.00f),
+                });
+            return g;
+        }
+
+        /// <summary>Droplets shrink as they fall behind; the far ones in the reference are a fifth
+        /// the diameter of the near ones on top of their own spread.</summary>
+        static AnimationCurve DropletSizeCurve()
+        {
+            AnimationCurve c = new AnimationCurve();
+            c.AddKey(new Keyframe(0.00f, 0.55f));
+            c.AddKey(new Keyframe(0.20f, 1.00f));
+            c.AddKey(new Keyframe(1.00f, 0.30f));
+            return c;
+        }
+
+        /// <summary>Streak taper: full width where it leaves the puck, gone by the tail. This is
+        /// what turns a line of equal puffs into the reference's flare.</summary>
+        static AnimationCurve StreakTaperCurve()
+        {
+            AnimationCurve c = new AnimationCurve();
+            c.AddKey(new Keyframe(0.00f, 1.00f));
+            c.AddKey(new Keyframe(0.45f, 0.52f));
+            c.AddKey(new Keyframe(1.00f, 0.06f));
+            return c;
         }
 
         // ------------------------------------------------------------------ physics state

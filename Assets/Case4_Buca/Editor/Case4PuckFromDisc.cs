@@ -63,6 +63,14 @@ public static class Case4PuckFromDisc
         Debug.Log(string.Format("[PuckFromDisc] body drawn size {0} -> {1}; original disc renderer disabled",
             beforeSize.ToString("F3"), bodyMr.bounds.size.ToString("F3")));
 
+        // The uniform scale above is what carried the disc mesh's OWN thickness ratio
+        // (0.507 / 1.152 = 0.440) onto the puck. Measured against the reference that is 3.9x too
+        // thick, and the puck is 1.375x too narrow besides - the owner's "daha genis ama daha
+        // basik". Rebuilding the scene has to land on the corrected proportions, not on the ones
+        // this function used to leave behind, so the correction runs here rather than only as a
+        // one-off edit to the saved scene.
+        Debug.Log(Case4PuckProportions.ApplyTo(puck));
+
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
         EditorApplication.Exit(0);
