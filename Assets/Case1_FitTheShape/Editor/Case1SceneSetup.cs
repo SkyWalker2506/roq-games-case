@@ -1662,7 +1662,11 @@ public static class Case1SceneSetup
         // Do not push lower without re-measuring I3 - and note the edge cannot reach the reference's
         // low end from this knob alone: the -0.04 in SoftPlastic's cavityMask smoothstep is a hard
         // floor on the ramp, independent of this value.
-        m.SetFloat("_IndentBevel", 0.035f);
+        // 0.075. At 0.035 the band the entrance curves over is thinner than the crease itself, so
+        // however the profile is shaped there is nowhere for a curve to appear - the reference's
+        // sockets bend into the hole over a visible width. See the monotonic outer ramp in
+        // SoftPlastic.shader, which is the other half of this.
+        m.SetFloat("_IndentBevel", 0.075f);
         // USER: "derinligi artir genel olarak". Every INTENSIVE depth ratio was already at or past
         // the reference - floor/face 0.068-0.178 against its 0.067-0.152, intra-socket contrast
         // 0.54-0.85 against its 0.51-0.76, top-to-bottom gradient +0.42 to +0.77 against its +0.16

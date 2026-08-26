@@ -329,12 +329,26 @@ Shader "Case1/SoftPlastic"
                     // (the cut, unchanged) and at -ww INSIDE (the wall, now its own width).
                     float bw = _IndentBevel;
                     float ww = (_IndentWall > 0.0001) ? _IndentWall : bw * 0.8;
+                    // MONOTONIC on the outside, which is what makes the entrance read as CURVED
+                    // rather than as a flat frame with a crease cut in it.
+                    //
+                    // The old profile was sin(t * pi) across the whole band: a symmetric ridge that
+                    // peaked ON the boundary and fell to zero BOTH ways. Outside the hole that means
+                    // the face tilts up, crests, then drops - a raised lip. The eye reads a raised
+                    // lip as a flat plate with a groove in it, which is exactly the "duz cerceve"
+                    // the reference does not have.
+                    //
+                    // Now the outer half ramps straight from flat at +bw to full tilt at the
+                    // boundary with no crest anywhere, so the face bends continuously down into the
+                    // opening - one surface curving in. The inner half is unchanged in spirit: it
+                    // still falls away from the boundary so the wall turns vertical and meets the
+                    // floor.
                     float slope = 0.0;
                     if (dist < bw)
                     {
-                        float t = (dist >= 0.0) ? (0.5 + 0.5 * saturate(dist / bw))
-                                                : (0.5 - 0.5 * saturate(-dist / ww));
-                        slope = sin(saturate(t) * 3.14159265f);
+                        slope = (dist >= 0.0)
+                              ? smoothstep(0.0, 1.0, 1.0 - saturate(dist / bw))
+                              : 1.0 - smoothstep(0.0, 1.0, saturate(-dist / ww));
                     }
 
                     // Perturbed Object Space normal (deep steep carved inward socket)
