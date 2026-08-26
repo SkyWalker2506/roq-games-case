@@ -165,6 +165,11 @@ namespace Case2
             /// <summary>-1 for a shard the hole swallows; 0..n for one that survives the seal.</summary>
             public int Survivor;
             public Vector3 RestPos;
+            /// <summary>Needed to write alpha every frame; the vanish is opacity, not scale.</summary>
+            public Renderer Rend;
+            public Color BaseColor;
+            /// <summary>Sequence time at which a stray came to rest; &lt; 0 while it is still moving.</summary>
+            public float StopTime;
         }
 
         readonly List<Shard> _shards = new List<Shard>(64);
@@ -174,6 +179,49 @@ namespace Case2
         MaterialPropertyBlock _mpb;
 
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+
+        // ------------------------------------------------------------------ break/fall constants
+        //
+        // These are constants and not serialised fields for the same reason the halo band is: the
+        // values that would carry them live on the hand-authored BlockHole scene and this branch
+        // must not re-serialise it. The authored fields they supersede are listed in the report.
+        //
+        // MEASURED on the reference's purple cross break (f109 onward, 65 fps): the debris area
+        // decays smoothly to 9.3% of its break-frame value by 0.615 s, and the mean luminance of
+        // what is left falls 75.8 -> ~40 over the same window. Both curves are gradual - there is
+        // no frame where the cloud snaps out. So the vanish is a FADE lasting about 0.6 s that
+        // runs WHILE the pieces are still descending, which is exactly "duserken yavasca
+        // kaybolsun".
+        const float FadeSeconds = 0.60f;
+
+        /// <summary>Fraction of the fade window held at full opacity so the break still lands solid.</summary>
+        const float FadeHoldFraction = 0.22f;
+
+        /// <summary>
+        /// Token shrink only. The owner's note is "oyle cok kuculmesin" - not that the shrink is
+        /// wrong, that it is too much. Dropping it to zero made the pieces read as flat cards
+        /// sliding down; 0.18 keeps a little perspective without the piece receding to a dot, and
+        /// the disappearance is now carried by alpha rather than by scale.
+        /// </summary>
+        const float ShrinkResidual = 0.18f;
+
+        /// <summary>
+        /// How much of the authored outward impulse survives. The pieces "delik icine dusecek" -
+        /// they go DOWN through the opening - with only some scatter allowed. The scene's
+        /// outwardSpeed is 1.45, tuned when the burst was meant to stand clear of the board.
+        /// </summary>
+        const float OutwardKeep = 0.42f;
+
+        /// <summary>Downward launch added to every non-core piece, so the cloud pours rather than sprays.</summary>
+        const float DownwardLaunch = 1.15f;
+
+        /// <summary>
+        /// A stray that lands outside the opening lingers this long AFTER IT STOPS, then fades.
+        /// Measured from its own rest time and not from the break, so the piece that flew furthest
+        /// does not vanish in mid-air while a near one is still sitting there.
+        /// </summary>
+        const float StrayLingerSeconds = 1.00f;
+        const float StrayFadeSeconds = 0.45f;
 
         /// <summary>Number of shards created by the last break.</summary>
         public int ShardCount { get { return _shards.Count; } }
@@ -261,22 +309,30 @@ namespace Case2
             // its shards next to itself. Whoever knows the real bounds passes them in.
             _root.transform.position += art.center - shardBounds.center;
 
-            // Centre the cloud on the opening, which is where the piece actually broke. (The note
-            // that used to sit here claimed the reference's chunks "never leave the hole's own
-            // footprint"; its 1.60s frame shows them well outside it. Centring the spawn is still
-            // right - it is the containment that was wrong, and that lives in the funnel timing.)
-            Vector3 spawnFix = new Vector3(holeCenter.x - art.center.x, 0f, holeCenter.z - art.center.z);
-            _root.transform.position += spawnFix;
-
-            // The piece now settles INTO the opening, so by the time it breaks its art centre can
-            // be below the mouth - and Fall() shrinks away anything under holeCenter.y, which would
-            // swallow the whole burst on the frame it spawned. Lift the cloud to the mouth so the
-            // shards still erupt out of the hole rather than starting inside it.
-            float mouthY = holeCenter.y + 0.06f;
-            float spawnLift = Mathf.Max(0f, mouthY - art.center.y);
-            if (spawnLift > 0f) _root.transform.position += Vector3.up * spawnLift;
-
-            Vector3 center = new Vector3(holeCenter.x, Mathf.Max(art.center.y, mouthY), holeCenter.z);
+            // THE CLOUD IS NOT RECENTRED ONTO THE HOLE. This is the single root of three separate
+            // things the owner reported, and they are all the same mistake.
+            //
+            // What used to happen here: the burst was translated so that the block's art centre
+            // landed on holeCenter, and then lifted so it sat at the hole's MOUTH.
+            //
+            //   - "delik ortalayinca yanlis yere ortaliyor" - centring on the hole puts the break
+            //     in the wrong place. holeCenter is the hole transform's position, i.e. the centre
+            //     of its BOUNDING BOX. For an L or a Two that point is not inside the shape at
+            //     all, so the whole cloud was shifted off the cells that actually broke. It only
+            //     ever looked right on the Cross and the Square, whose bbox centre IS on the shape
+            //     - the same class of error as CombinedBounds versus ArtBounds earlier today.
+            //   - "tum bosluk degil, sadece obje parcalanip dokusuyor" - it is the OBJECT that
+            //     breaks, not the whole opening. Recentring plus the funnel below spread the
+            //     debris over the hole's full extent instead of the block's own footprint.
+            //   - "kirilmadan once deligin icine giriyor" - the piece is already 0.9 units down
+            //     inside the opening by the time it breaks, and the lift threw the fracture back
+            //     up to board level, undoing the drop the player had just watched.
+            //
+            // The block has ALREADY been snapped into its hole, art-aligned, by SnapInto. Its art
+            // centre is therefore the correct break origin by construction, and no correction of
+            // any kind is wanted. Everything downstream - the core radius, the outward direction,
+            // the funnel and the resting strays - now hangs off this one point.
+            Vector3 center = art.center;
 
             // ---------------------------------------------------------------- which pieces survive
             //
@@ -393,7 +449,11 @@ namespace Case2
                 // spawn, they migrate outward. The reference holds 64.6% there.
                 float spawnRadius = out3.magnitude;
                 float distFactor = Mathf.Clamp01(spawnRadius / 1.2f);
-                float radial = outwardSpeed * distFactor * Random.Range(0.75f, 1.35f);
+                // Damped: "parcalar delik icine dusecek, yani etrafa sacilmasi haricinde" - the body
+                // of the debris goes DOWN through the opening and only some of it scatters. The
+                // scene's outwardSpeed is 1.45, authored when the burst was meant to stand clear of
+                // the board at 1.60 s; OutwardKeep pulls that back without touching the scene.
+                float radial = outwardSpeed * OutwardKeep * distFactor * Random.Range(0.75f, 1.35f);
                 float jitterScale = 0.3f + 0.7f * distFactor;
                 out3 = out3.normalized * radial
                      + new Vector3(Random.Range(-0.6f, 0.6f), 0f, Random.Range(-0.6f, 0.6f)) * jitterScale;
@@ -419,10 +479,18 @@ namespace Case2
                 _shards.Add(new Shard
                 {
                     Tr = go.transform,
+                    Rend = mr,
+                    BaseColor = shardColor,
+                    StopTime = -1f,
                     // The core is thrown gently and given a narrow spread of gravity scales, so it
                     // stays over the mouth through the peak instead of being lofted off its own
                     // cell - the camera is tilted, so height reads as travel up the screen.
-                    Velocity = out3 + Vector3.up * (Random.Range(riseSpeed.x, riseSpeed.y) * (core[i] ? coreRise : 1f)),
+                    // Down the hole. The pop upward is kept - a break with no rise at all reads as
+                    // the piece deflating - but a downward launch is added on top of it so the net
+                    // motion of the cloud is into the opening rather than across the board.
+                    Velocity = out3
+                             + Vector3.up * (Random.Range(riseSpeed.x, riseSpeed.y) * (core[i] ? coreRise : 1f))
+                             + Vector3.down * (DownwardLaunch * Random.Range(0.6f, 1.25f)),
                     Spin = new Vector3(Random.Range(-550f, 550f), Random.Range(-550f, 550f), Random.Range(-550f, 550f)),
                     BaseScale = go.transform.localScale,
                     GravityScale = core[i] ? Random.Range(0.9f, 1.4f) : Random.Range(0.8f, 2.4f),
@@ -470,10 +538,13 @@ namespace Case2
                 }
                 s.BaseScale = s.Tr.localScale;
                 s.Survivor = k;
+                // x/z from the BLOCK's own centre - the strays scatter from where the piece broke.
+                // y from the board, because a stray that clears the lip rests on the tiles, and the
+                // break itself now happens ~0.9 units below them.
                 s.RestPos = new Vector3(
-                    holeCenter.x + SurvivorRestCells[k].x * cellWorld,
+                    center.x + SurvivorRestCells[k].x * cellWorld,
                     holeCenter.y + survivorRestLift,
-                    holeCenter.z + SurvivorRestCells[k].y * cellWorld);
+                    center.z + SurvivorRestCells[k].y * cellWorld);
                 _shards[idx] = s;
             }
 
@@ -481,7 +552,10 @@ namespace Case2
 
             PlayVfx(center, holeCenter);
 
-            _fall = StartCoroutine(Fall(holeCenter, fallDuration));
+            // Fall() is given the plane the piece actually broke on AND the board level, because
+            // they are no longer the same thing: the break happens ~0.9 units down inside the
+            // opening, while a stray that clears the lip comes to rest up on the board.
+            _fall = StartCoroutine(Fall(center, holeCenter, fallDuration));
             return _shards.Count;
         }
 
@@ -673,7 +747,7 @@ namespace Case2
                 VFXPool.Play(dustPuffPrefab, fxPos, Quaternion.identity, 1f);
         }
 
-        IEnumerator Fall(Vector3 holeCenter, float duration)
+        IEnumerator Fall(Vector3 breakCenter, Vector3 holeCenter, float duration)
         {
             float t = 0f;
             while (t < duration)
@@ -717,22 +791,46 @@ namespace Case2
                         s.Tr.position = Vector3.Lerp(flown, s.RestPos, u);
                         s.Tr.Rotate(s.Spin * ((1f - u) * dt), Space.World);
                         s.Tr.localScale = s.BaseScale;
+
+                        // "o yok olma esnasinda etrafa sacilanlar da boyle bir saniye sonra onlar
+                        // da yine yok olsun, oyle kalmasi etrafta" - nothing stays lying on the
+                        // board. The stray holds its rest pose for about a second and then fades
+                        // out on the same opacity path as the rest of the debris.
+                        //
+                        // The clock starts when THIS piece stops, not at the break. Timing it from
+                        // the break would make the piece that flew furthest vanish in mid-air while
+                        // a near one, long since settled, was still sitting there.
+                        if (s.StopTime < 0f && u >= 1f) s.StopTime = t;
+                        float sa = 1f;
+                        if (s.StopTime >= 0f)
+                        {
+                            sa = 1f - Mathf.SmoothStep(0f, 1f,
+                                Mathf.Clamp01((t - s.StopTime - StrayLingerSeconds) / StrayFadeSeconds));
+                        }
+                        SetShardAlpha(ref s, sa);
+                        if (sa <= 0.02f && s.Tr.gameObject.activeSelf) s.Tr.gameObject.SetActive(false);
+
                         _shards[i] = s;
                         continue;
                     }
 
-                    // Below the mouth the shard stops free-falling and sinks at a fixed, readable rate.
-                    if (s.Tr.position.y < holeCenter.y && s.Velocity.y < -sinkSpeed)
+                    // Below the break plane the shard stops free-falling and sinks at a fixed,
+                    // readable rate. Measured against breakCenter, not the board: the piece broke
+                    // ~0.9 units down inside the opening, so a board-relative test was already true
+                    // on the spawn frame and clamped the whole cloud immediately.
+                    if (s.Tr.position.y < breakCenter.y && s.Velocity.y < -sinkSpeed)
                     {
                         s.Velocity.y = -sinkSpeed;
                     }
 
                     Vector3 p = s.Tr.position + s.Velocity * dt;
 
-                    // Horizontal funnel: once the spray window has passed, draw the cloud back
-                    // over the mouth so the shards are swallowed rather than stranded on tiles.
-                    p.x = Mathf.Lerp(p.x, holeCenter.x, pull);
-                    p.z = Mathf.Lerp(p.z, holeCenter.z, pull);
+                    // Horizontal funnel, onto the BLOCK's own centre rather than the hole's
+                    // bounding-box centre. Aiming it at holeCenter is half of why the debris read
+                    // as filling the whole opening: every piece was dragged toward a point that,
+                    // on an L or a Two, is not even on the shape.
+                    p.x = Mathf.Lerp(p.x, breakCenter.x, pull);
+                    p.z = Mathf.Lerp(p.z, breakCenter.z, pull);
 
                     s.Tr.position = p;
                     // Measured AFTER the funnel, because the funnel is the thing that decides how
@@ -740,7 +838,7 @@ namespace Case2
                     // funnelRate entirely - the control changed the value and the number did not
                     // move, which is a test that cannot observe what it names.
                     _peakSpread = Mathf.Max(_peakSpread,
-                        Mathf.Max(Mathf.Abs(p.x - holeCenter.x), Mathf.Abs(p.z - holeCenter.z)));
+                        Mathf.Max(Mathf.Abs(p.x - breakCenter.x), Mathf.Abs(p.z - breakCenter.z)));
                     s.Tr.Rotate(s.Spin * dt, Space.World);
 
                     // Depth-driven scale, evaluated every frame and in BOTH directions.
@@ -755,12 +853,34 @@ namespace Case2
                     //
                     // A shard descending into the hole still shrinks exactly as before, so the
                     // swallow and the 1.95/2.40 decay are untouched.
-                    float depth = holeCenter.y - p.y;
+                    // THE VANISH IS OPACITY, NOT SCALE.
+                    //
+                    // "bizde kirilan parcalar kuculuyor. oyle cok kuculmesin. parcalansin, asagi
+                    // dogru duserken yavasca kaybolsun." A shrinking shard reads as a piece
+                    // receding into the distance; a fading one reads as debris settling out of
+                    // sight, and the reference does the latter. MEASURED on the purple cross break:
+                    // the debris area decays smoothly to 9.3% of its break-frame value by 0.615 s
+                    // while the mean luminance of what remains falls 75.8 -> ~40. Both curves are
+                    // gradual and the fade runs WHILE the pieces are still descending.
+                    //
+                    // The shard material can actually show this: Case2/ToyChunk is on the
+                    // Transparent queue with `Blend SrcAlpha OneMinusSrcAlpha`, and _BaseColor's
+                    // alpha is the value it blends with - so writing alpha here reaches pixels
+                    // rather than being discarded, which is the silent failure this would otherwise
+                    // have been.
+                    float depth = breakCenter.y - p.y;
                     float k = depth > 0f
                         ? Mathf.Clamp01(1f - depth / Mathf.Max(0.05f, swallowDepth))
                         : 1f;
-                    s.Tr.localScale = s.BaseScale * Mathf.Max(0.05f, k);
-                    if (k <= 0.06f && s.Tr.gameObject.activeSelf) s.Tr.gameObject.SetActive(false);
+                    // A token amount of the old shrink, kept only so the pieces do not read as flat
+                    // cards sliding down. The disappearance is no longer carried by it.
+                    s.Tr.localScale = s.BaseScale * Mathf.Lerp(1f, Mathf.Max(0.05f, k), ShrinkResidual);
+
+                    float hold = FadeSeconds * FadeHoldFraction;
+                    float alpha = 1f - Mathf.SmoothStep(0f, 1f,
+                        Mathf.Clamp01((t - hold) / Mathf.Max(0.01f, FadeSeconds - hold)));
+                    SetShardAlpha(ref s, alpha);
+                    if (alpha <= 0.02f && s.Tr.gameObject.activeSelf) s.Tr.gameObject.SetActive(false);
 
                     _shards[i] = s;
                 }
@@ -769,8 +889,16 @@ namespace Case2
 
             for (int i = 0; i < _shards.Count; i++)
             {
-                // Survivors are deliberately left on the board. This blanket deactivation is why
-                // our 2.40 frame held 27 px of bright purple against the reference's 509.
+                // Survivors used to be left on the board on purpose. They are not any more: the
+                // owner's instruction is that nothing stays lying around, so a stray gets its
+                // linger and its fade inside the loop above and is then cleared with everything
+                // else. If the fall's duration runs out before a stray has finished fading, this
+                // is what removes it.
+                if (_shards[i].Survivor >= 0 && _shards[i].Tr != null)
+                {
+                    Destroy(_shards[i].Tr.gameObject);
+                    continue;
+                }
                 if (_shards[i].Survivor >= 0) continue;
                 // Destroyed, not merely switched off. A swallowed shard has finished its job and
                 // has nothing left to show, so the effect gives its objects back instead of
@@ -799,6 +927,26 @@ namespace Case2
         }
 
         bool _tearingDown;
+
+        /// <summary>
+        /// Writes one shard's opacity straight to its renderer. Kept in one place so both the
+        /// falling debris and the resting strays vanish the same way.
+        /// <para>
+        /// This reaches pixels: Case2/ToyChunk declares Queue=Transparent with
+        /// `Blend SrcAlpha OneMinusSrcAlpha`, so _BaseColor.a is the blend factor. On an opaque
+        /// material this whole path would be a silent no-op.
+        /// </para>
+        /// </summary>
+        void SetShardAlpha(ref Shard s, float alpha)
+        {
+            if (s.Rend == null) return;
+            if (_mpb == null) _mpb = new MaterialPropertyBlock();
+            s.Rend.GetPropertyBlock(_mpb);
+            Color c = s.BaseColor;
+            c.a = Mathf.Clamp01(alpha) * shardAlpha;
+            _mpb.SetColor(BaseColorId, c);
+            s.Rend.SetPropertyBlock(_mpb);
+        }
 
         /// <summary>Removes every shard and stops the fall; a replay starts from a clean board.</summary>
         public void Clear()

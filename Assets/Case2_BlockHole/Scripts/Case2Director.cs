@@ -29,6 +29,26 @@ namespace Case2
         public float dragToTarget = 0.38f;
         public float preDropHold = 0.03f;
         public float snapDuration = 0.14f;
+
+        /// <summary>
+        /// How long the piece takes to fall into its hole. A constant, not the serialised
+        /// <see cref="snapDuration"/>, because that field lives on the hand-authored BlockHole
+        /// scene at 0.06 s and this branch must not re-serialise it.
+        /// <para>
+        /// "zaten delige oturma var da cok hizli. onu .5 saniye yapalim hareketi" - the drop
+        /// already exists, it is just far too fast. MEASURED on the reference's red L, tracking the
+        /// top edge of its silhouette frame by frame at 65 fps: the piece descends continuously
+        /// from f880 to f913 and is then motionless from f913 to f924, breaking at f925. That is a
+        /// 0.508 s fall followed by a 0.169 s dwell. The owner's "0.5 saniye" is the fall, and the
+        /// footage agrees with it to within a frame.
+        /// </para>
+        /// <para>
+        /// The other two numbers he did NOT ask to change turn out to be right already, so they
+        /// are left alone: the scene's anticipationDuration is 0.15 s against the reference's
+        /// 0.169 s dwell, and dropDepth is 0.9 units against his estimate of "about 1 metre".
+        /// </para>
+        /// </summary>
+        public const float SnapSecondsFixed = 0.50f;
         public float anticipationDuration = 0.95f;
         public float shatterDuration = 0.35f;
         public float sinkDuration = 0.35f;
@@ -222,21 +242,32 @@ namespace Case2
         /// </summary>
         IEnumerator DropTail(BlockDragController d, HoleGlowHighlight hole, bool record, float baseOffset)
         {
-            float tSnap = baseOffset + snapDuration;
-            float tAntic = tSnap + anticipationDuration;
-            float tShatter = tAntic + shatterDuration;
-            float tSink = tShatter + sinkDuration;
-            float tClose = tSink + closeDuration;
+            float tSnap = baseOffset + SnapSecondsFixed;
 
             // ---------------------------------------------------------- snap
             if (record)
             {
                 BeginStep("snap");
                 _dropTime = SequenceTime;
-                Fire(JuiceEvent.Overshoot, "OutBack drop into the hole over " + snapDuration.ToString("0.00") + " s");
+                Fire(JuiceEvent.Overshoot, "OutBack drop into the hole over " + SnapSecondsFixed.ToString("0.00") + " s");
             }
-            yield return d.SnapInto(hole, Remaining(tSnap));
+            // The drop is given its FULL length rather than whatever is left on the absolute
+            // clock. Remaining() returns zero once the moment has passed, so a sequence that had
+            // drifted even slightly late played the fall in a single frame - and at the authored
+            // 0.06 s it was about four frames even when perfectly on time, which is why it read as
+            // no drop at all followed by a break.
+            yield return d.SnapInto(hole, Mathf.Max(SnapSecondsFixed, Remaining(tSnap)));
             if (record) EndStep();
+
+            // EVENT-BASED FROM HERE, not scheduled. Every beat after the drop is measured from the
+            // moment the piece ACTUALLY SETTLED, so lengthening the fall cannot make the break
+            // fire while the block is still in the air. The old code derived tAntic from an
+            // absolute tSnap computed before the drop began; with a 0.06 s fall the difference was
+            // invisible, with a 0.5 s one it would break in mid-flight.
+            float tAntic = SequenceTime + anticipationDuration;
+            float tShatter = tAntic + shatterDuration;
+            float tSink = tShatter + sinkDuration;
+            float tClose = tSink + closeDuration;
 
             // ---------------------------------------------------------- anticipation + shatter
             if (record)
@@ -314,7 +345,7 @@ namespace Case2
             if (record)
             {
                 float observedFall = SequenceTime - _dropTime;
-                float authoredFall = snapDuration + anticipationDuration + shatterDuration + sinkDuration;
+                float authoredFall = SnapSecondsFixed + anticipationDuration + shatterDuration + sinkDuration;
                 Fire(JuiceEvent.Deform, string.Format("shards fully inside the hole; drop -> end of fall = {0:0.00} s", authoredFall));
                 Debug.Log(string.Format("[Case2] PROOF drop -> end of readable fall = {0:0.000} s (authored {1:0.000} s)",
                     observedFall, authoredFall));
