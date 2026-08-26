@@ -382,7 +382,7 @@ namespace Case2
         // NonSerialized: every hole in the scene carries its own 0.21, which would override this.
         // Owner-directed deviation from the measured 200-230 ms - at the reference's speed the tiles
         // read as a flicker rather than as blocks arriving, so the arc is roughly doubled.
-        [System.NonSerialized] public float tileRiseDuration = 0.9f;
+        [System.NonSerialized] public float tileRiseDuration = 0.5f;
 
         [Tooltip("Fraction of the arc spent climbing to flush. Measured: cell (2,2) crossed the board "
             + "plane at f66 of a f63-f70 motion, so about half.")]
@@ -392,7 +392,7 @@ namespace Case2
             + "66-74 at 30 fps, i.e. 267 ms.")]
         /// <summary>Seconds the per-cell start times are spread over. 0.8: the arcs are 2 s now,
         /// and a 0.27 spread across a 2 s move is not a stagger, it is a rounding error.</summary>
-        [System.NonSerialized] public float tileRiseStagger = 0.12f;
+        [System.NonSerialized] public float tileRiseStagger = 0.07f;
 
         Transform[] _cellTiles;
         Vector3[] _cellTileHome;
@@ -840,7 +840,13 @@ namespace Case2
             // that band the triangle is untouched, so the travel really is linear.
             float v = Mathf.Clamp01((k - cross) / (1f - cross));
             float tri = 1f - Mathf.Abs(2f * v - 1f);                 // 0 -> 1 -> 0, straight sides
-            const float Turn = 0.22f;                                 // how much of the arc is the turn
+            // The turn is WIDER now, and that is what lets the arc be shorter without losing the
+            // move. Cutting the duration alone halves the time spent near the peak, and a tile that
+            // is high for half as long reads as one that did not go as high - that is what "bozuldu"
+            // was, not a change in distance. Giving the apex a bigger share of the arc keeps the
+            // hang at the top while the straight travel either side gets quicker, so the same
+            // motion fits in less time instead of being clipped out of it.
+            const float Turn = 0.40f;                                 // how much of the arc is the turn
             float near = Mathf.Clamp01((tri - (1f - Turn)) / Turn);   // 0 outside the apex band, 1 at it
             float round = near * near * (3f - 2f * near) - near;      // smoothstep minus the line
             return (tri + round * Turn * 0.5f) * tileRiseHeight;
