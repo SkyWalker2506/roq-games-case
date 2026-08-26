@@ -286,8 +286,10 @@ namespace Case2
             Squash.SquashStretch(d.Block, SquashAxis.Y, -0.055f, DwellSecondsFixed, EaseType.InQuad);
             yield return WaitUntil(tAntic);
 
-            // The neon hands over to the pit: the glow dies as the dark opening takes its place.
-            hole.SetLit(false);
+            // The neon does NOT hand over to the pit here. It used to - SetLit(false) fired on this
+            // frame, which is the real reason the outline vanished the instant the block broke, half
+            // a second before any tile rose. Moving Spend twice did not touch it, because Spend only
+            // tints the lip and cavity; the halo is _glow, and this was the line that killed it.
             hole.OpenPit(0.16f);
 
             if (hitstopSeconds > 0f) HitstopService.Stop(hitstopSeconds);
@@ -380,10 +382,13 @@ namespace Case2
             // falling through the opening; a late white puff masks that motion and reads as a reset VFX.
             AudioService.Play(SfxId.TapPop, 0.22f);
             yield return WaitUntil(tClose);
-            // LAST, not first. "bu acik kalmali hepsi yerlesene kadar" - the lit opening is what
-            // says where the pieces are going, so it holds until every tile has risen and settled
-            // and only then gives the shape up. Spending it any earlier leaves a stretch where the
-            // hole has stopped announcing itself and the board has not yet arrived.
+            // LAST, not first. "hala ilk basta kayboluyor sonra kareler yukseliyor - karelerin hepsi
+            // bitmeden kaybolmasin". Both of the things that make the opening visible are released
+            // here, together, after every tile has risen and settled: the halo (SetLit) and the
+            // lip/cavity tint (Spend). Either one on its own leaves the other still announcing a
+            // hole that is no longer there, or - as it did - kills the outline while the board is
+            // still on its way back.
+            hole.SetLit(false);
             hole.Spend(spentFadeDuration);
             if (record) EndStep();
         }
