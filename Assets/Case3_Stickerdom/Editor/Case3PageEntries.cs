@@ -418,7 +418,16 @@ public static class Case3PageEntries
         // so "1/5" measured 53 render px when the digits were 42.5. Isolating the rightmost
         // digit clear of the art gives 39 px at fontSize 5.48, against a panel 262 * 1.05 =
         // 275 render px tall, so 14.2% where the reference is 16.4%. 5.48 * 45.1/39 = 6.34.
-        tmp.fontSize = 6.34f;
+        // RE-MEASURED after the panel changed under this number.
+        //
+        // 6.34 was solved against the OLD card, whose panel still carried the empty band at the
+        // bottom. Removing that band moved the denominator, and the same fontSize then rendered the
+        // digits at 25.7% of the panel instead of the reference's 16.4% - tall enough to overflow
+        // their own 0.520-unit rect, which is what put "1/5" over the card's edge.
+        //
+        // Measured live through TMP's own textBounds rather than off pixels: at 6.34 the glyphs are
+        // 0.708 world units against a 2.751-unit panel. 6.34 * (0.164 * 2.751) / 0.708 = 4.04.
+        tmp.fontSize = 4.04f;
         tmp.enableAutoSizing = false;
         tmp.fontStyle = FontStyles.Bold;
         tmp.color = CounterInk;
