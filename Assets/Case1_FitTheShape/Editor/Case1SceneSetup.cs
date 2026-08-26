@@ -1630,8 +1630,8 @@ public static class Case1SceneSetup
         // alongside the specular showed no plateau change attributable to it. Kept small rather
         // than zeroed so the cell edge still reads against its neighbour.
         m.SetFloat("_RimLift",           isPiece ? 0.10f : (isCell ? 0.02f : 0.00f));
-        m.SetFloat("_EdgeInk",           isPiece ? 0.45f : 0.25f);
-        m.SetFloat("_EdgeInkWidth",      isPiece ? 4.5f : 3.0f);
+        m.SetFloat("_EdgeInk",           isPiece ? 0.45f : 0.50f);
+        m.SetFloat("_EdgeInkWidth",      isPiece ? 4.5f : 4.2f);
         // The silhouette outline the reference blocks carry. Pieces only: the board cells sit
         // shoulder to shoulder and a contour on each would draw a grid, which the reference has not.
         // Zero here since the first commit, alongside a shader that never had an outline pass to

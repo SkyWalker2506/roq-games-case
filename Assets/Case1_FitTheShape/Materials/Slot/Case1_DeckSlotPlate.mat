@@ -66,8 +66,8 @@ Material:
     - _Cutoff: 0.5
     - _DstBlend: 0
     - _DstBlendAlpha: 0
-    - _EdgeInk: 0.25
-    - _EdgeInkWidth: 3
+    - _EdgeInk: 0.5
+    - _EdgeInkWidth: 4.2
     - _IndentLipStrength: 0.3
     - _IndentCreaseAO: 0.18
     - _IndentCornerSink: 0.9

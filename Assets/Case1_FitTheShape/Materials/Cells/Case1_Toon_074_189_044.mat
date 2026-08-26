@@ -36,8 +36,8 @@ Material:
     - _CavityLightKill: 1
     - _Cull: 2
     - _CurveDarken: 0
-    - _EdgeInk: 0.25
-    - _EdgeInkWidth: 3
+    - _EdgeInk: 0.5
+    - _EdgeInkWidth: 4.2
     - _IndentLipStrength: 0.3
     - _IndentCreaseAO: 0.18
     - _IndentCornerSink: 0.9

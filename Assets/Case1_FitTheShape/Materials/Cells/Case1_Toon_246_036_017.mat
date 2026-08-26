@@ -29,8 +29,8 @@ Material:
     - _BottomDarken: 0.85
     - _BottomDarkenPower: 1.3
     - _Cull: 2
-    - _EdgeInk: 0.25
-    - _EdgeInkWidth: 2
+    - _EdgeInk: 0.5
+    - _EdgeInkWidth: 4.2.2
     - _IndentLipStrength: 0.3
     - _IndentCreaseAO: 0.18
     - _IndentCornerSink: 0.9
