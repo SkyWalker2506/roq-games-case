@@ -31,6 +31,7 @@ Material:
     - _Cull: 2
     - _EdgeInk: 0.25
     - _EdgeInkWidth: 2
+    - _IndentCornerSink: 0.9
     - _IndentBevel: 0.08
     - _IndentDepth: 0.22
     - _IndentFloorDarken: 0.52

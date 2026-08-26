@@ -35,6 +35,10 @@ Shader "Case1/SoftPlastic"
         _ShapeType("Shape Type (0=None, 1=Square, 2=Triangle, 3=Hexagon, 4=Star, 5=Diamond)", Float) = 0
         _IndentDepth("Indent Parallax Depth", Range(0, 0.4)) = 0.18
         _IndentBevel("Indent Bevel Width", Range(0.01, 0.15)) = 0.065
+        // How much harder the entrance sinks at the CORNERS than along the straight edges. Keyed on
+        // the SDF's curvature, so it follows whatever shape the socket is - four corners on a
+        // square, three on a triangle, ten on a star - instead of being told where to look.
+        _IndentCornerSink("Indent Corner Sink", Range(0, 2)) = 0.9
         _IndentFloorDarken("Indent Floor Darkness", Range(0, 1.0)) = 0.72
         // MEASURED off Fit The Shape.mp4 f_010. The reference socket is not a scaled copy of the
         // cell colour: inset/face per channel reads (0.272, 0.006, 0.000) on the orange cell and
@@ -188,6 +192,7 @@ Shader "Case1/SoftPlastic"
             float _ShapeType;
             float _IndentDepth;
             float _IndentBevel;
+            float _IndentCornerSink;
             float _IndentFloorDarken;
             float _CavityBounce;
             float _CavityLightKill;
@@ -320,9 +325,23 @@ Shader "Case1/SoftPlastic"
 
                     // Compute SDF gradient for 3D inward-facing slope normals
                     float eps = 0.015;
-                    float dx = (EvaluateShapeSDF(p + float2(eps, 0), _ShapeType) - EvaluateShapeSDF(p - float2(eps, 0), _ShapeType)) / (2.0 * eps);
-                    float dy = (EvaluateShapeSDF(p + float2(0, eps), _ShapeType) - EvaluateShapeSDF(p - float2(0, eps), _ShapeType)) / (2.0 * eps);
+                    float sxp = EvaluateShapeSDF(p + float2(eps, 0), _ShapeType);
+                    float sxm = EvaluateShapeSDF(p - float2(eps, 0), _ShapeType);
+                    float syp = EvaluateShapeSDF(p + float2(0, eps), _ShapeType);
+                    float sym = EvaluateShapeSDF(p - float2(0, eps), _ShapeType);
+                    float dx = (sxp - sxm) / (2.0 * eps);
+                    float dy = (syp - sym) / (2.0 * eps);
                     float2 grad = normalize(float2(dx, dy) + 0.0001);
+
+                    // CORNER DETECTION, measured off the shape rather than hard-coded.
+                    //
+                    // The Laplacian of a distance field is ~0 along a straight edge - the field is a
+                    // ramp there, second derivative zero - and rises like 1/r where the boundary
+                    // curves. So it IS "how much of a corner is this", and it works for whatever the
+                    // socket happens to be: four on a square, three on a triangle, ten on a star. No
+                    // per-shape table, nothing to keep in sync with EvaluateShapeSDF.
+                    float lap = (sxp + sxm + syp + sym - 4.0 * dist) / (eps * eps);
+                    float corner = saturate(lap * eps);
 
                     // Beveled rim profile: inward normal perturbation inside the shape boundary.
                     // The peak sits ON the shape boundary and the band fades to zero at +bw OUTSIDE
@@ -350,6 +369,10 @@ Shader "Case1/SoftPlastic"
                               ? smoothstep(0.0, 1.0, 1.0 - saturate(dist / bw))
                               : 1.0 - smoothstep(0.0, 1.0, saturate(-dist / ww));
                     }
+                    // The corners sink harder. Multiplying the SLOPE rather than widening the band
+                    // keeps the opening the same size - a corner that ate into the face would change
+                    // the socket's silhouette, and the reference's does not.
+                    slope *= 1.0 + corner * _IndentCornerSink;
 
                     // Perturbed Object Space normal (deep steep carved inward socket)
                     float3 N_OS = normalize(float3(grad.x * slope * 3.2f, 1.0f, grad.y * slope * 3.2f));
