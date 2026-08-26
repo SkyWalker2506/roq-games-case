@@ -1211,15 +1211,15 @@ namespace Case3
                 // units on the cat - so the transform sat still and the sheet wandered off ("random
                 // bir yere giderek aciliyor"). Pinning the centre fixes that but buys the other
                 // complaint, rotation in place. Pinning the edge fixes both.
-                // Hold the HINGE CORNER exactly where it started. The AABB edge I pinned before is
-                // not the hinge - it is the outer bound of the curl, which grows as the roll does, so
-                // the "fixed" point crept down the sheet. The corner is a fixed local point; pinning
-                // its drawn position cancels the mesh's centroid compensation and nothing but the
-                // authored lift moves it.
-                Vector3 lift = new Vector3(0f, peelLift * e, -0.05f * e);
-                Vector3 pivotNow = peel.PivotWorld();
-                Vector3 centreNowP = peel.VisualWorldCentre(9);
-                PlaceDrawnAt(peel, centreNowP + (peelPivotHome + lift - pivotNow));
+                // THE OBJECT'S CENTRE DOES NOT MOVE. Not the drawn centre, not the curl's bounds,
+                // not the hinge - the sheet's own transform, which is what "the object's centre"
+                // means and what the card will later be asked to match.
+                //
+                // Every previous attempt pinned something derived from the CURL, and every one of them
+                // moved, because everything about the curl grows as it rolls. With the centroid
+                // compensation off there is nothing left to cancel: the sheet stays put and the fold
+                // just deforms the drawing around it.
+                _stickerTf.position = homePosition + new Vector3(0f, peelLift * e, -0.05f * e);
 
                 // Two-layer rule from .plan-build/audio.md: main hit, second accent 0.10-0.14 s later.
                 if (!secondPeelLayer && SequenceClock - _t0 >= tTap + 0.10f)
@@ -1237,11 +1237,10 @@ namespace Case3
             // The flight starts from wherever holding the edge has left the paper - read it, do not
             // assume it, because the centre has legitimately travelled during the roll.
             Vector3 endLift = new Vector3(0f, peelLift, -0.05f);
-            Vector3 pivotEnd = peel.PivotWorld();
-            Vector3 centreEnd = peel.VisualWorldCentre(9);
-            PlaceDrawnAt(peel, centreEnd + (peelPivotHome + endLift - pivotEnd));
-            Vector3 drawnLaunch = peel.VisualWorldCentre(9);
-            drawnLaunch.z = drawnHome.z + endLift.z;
+            _stickerTf.position = homePosition + endLift;
+            // The flight carries the sheet's OWN centre, so the landing can put that centre on the
+            // card's centre and have it sit in the middle however far the curled part hangs.
+            Vector3 drawnLaunch = _stickerTf.position;
 
             // PEEL COMPLETION IS THE PROMOTION INSTANT. In the reference the jar is uncovered at
             // t=4.11 and is a fully collectible sticker from that frame on - it is tapped and
@@ -1315,14 +1314,15 @@ namespace Case3
             // the card as the sheet flattens. A placed sticker is printed onto the page and casts nothing.
             peel.MarkPlaced();
 
-            // The edge that will stay put for the whole unroll, taken while the sheet is still fully
-            // curled and already sitting at its card.
-            Vector3 edgeAnchor = peel.AnchoredEdgeWorld();
 
             while (SequenceClock < _t0 + tFlip)
             {
                 float k = Mathf.Clamp01((SequenceClock - _t0 - tFlight) / Mathf.Max(0.0001f, flipDuration));
-                float e = Ease.Evaluate(EaseType.OutCubic, k);
+                // InOutSine, not OutCubic. OutCubic puts most of the change in the first third, so the
+                // curl collapsed almost at once and read as a snap - the owner: "birden sifira dogru
+                // gelmesi lazim... bir anda yerine oturuyor gibi oluyor". InOutSine eases out of the
+                // curled pose and eases into flat, so the paper relaxes open instead of dropping.
+                float e = Ease.Evaluate(EaseType.InOutSine, k);
 
                 peel.SetProgress(Mathf.Lerp(peelEnd, 0f, e));
                 // Press, not shrink: the sheet dips slightly under its settled size and comes back,
@@ -1330,15 +1330,10 @@ namespace Case3
                 // approached 0.99 from above, so the beat had no contact in it.
                 float press = 1f - 0.045f * Mathf.Sin(k * Mathf.PI);
                 _stickerTf.localScale = Vector3.Lerp(flightEndScale, slotScale, Ease.Evaluate(EaseType.OutQuad, k)) * press;
-                // Re-anchored EVERY frame of the unwind. The curl offset collapses as the paper
-                // flattens, and holding the transform still while that happens is precisely what used
-                // to drag the drawn sheet 1.18 u across the album in 27 ms. Pinning the DRAWN centre
-                // instead lets the paper unwind in place, which is what the reference does.
-                // Hold the STUCK EDGE, not the centre. Pinning the centre is what made the sheet
-                // turn about itself - paper does not do that. One edge holds, the rest opens out from
-                // it, and the centre travels the half-length it gains as the roll flattens.
-                Vector3 edgeNow = peel.AnchoredEdgeWorld();
-                PlaceDrawnAt(peel, PeelDrawnCentre(peel, edgeAnchor, edgeNow, restCentre, e));
+                // Same rule as the peel: the object's centre stays where the flight left it. Every
+                // variant that pinned something derived from the curl - drawn centre, AABB edge,
+                // hinge - moved, because all of them grow with the roll.
+                _stickerTf.position = restCentre;
                 TraceMark("flip");
                 yield return null;
             }

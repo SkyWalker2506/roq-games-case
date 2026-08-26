@@ -117,7 +117,17 @@ namespace Case3
 
         [Header("Curl stability")]
         [Tooltip("0 keeps the sticker anchor fixed; 1 fully recentres the curl. Partial compensation preserves the sticker silhouette without making the entire graphic slide like a loose cloth.")]
-        [Range(0f, 1f)] public float centroidCompensation = 0.34f;
+        // ZERO, and NonSerialized so the scene's 0.34 cannot bring it back.
+        //
+        // This slid the drawn mesh sideways as the curl grew, on the theory that a rolled sheet should
+        // drift toward its own new centre of area. In practice it is the thing that made the sticker
+        // "ta uzaklara" go while peeling, and it made the OBJECT'S CENTRE a moving target - so the
+        // director could never simply say "put this centre on that centre".
+        //
+        // The owner's rule, and it is the right one: the object's centre does not move while it peels.
+        // The curl only deforms the drawing around it. Then placing that centre on the card's centre
+        // lands the sticker exactly in the middle, however far the curled part happens to hang.
+        [System.NonSerialized] public float centroidCompensation = 0f;
 
         [Header("Shading")]
         [Tooltip("Grey shadow the curl casts on the flat sheet, as a fraction of the curl radius.")]
