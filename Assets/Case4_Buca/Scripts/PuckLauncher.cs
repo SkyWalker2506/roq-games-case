@@ -104,53 +104,99 @@ namespace Case4
         // of the puck's world diameter and converted with the live launch speed, because the trail
         // in world simulation space is (speed x lifetime) long: a length in puck-diameters is the
         // thing the reference actually holds constant, seconds are not.
-        [Header("Trail shaped against the reference (see the block above this in source)")]
-        [Tooltip("Puck diameters behind the puck that the warm streak covers, ON SCREEN. MEASURED " +
-                 "2.1 d for the faint tail; the strongly-warm core is 0.80 d and falls out of the " +
-                 "size and alpha ramps rather than being a second number.")]
-        public float streakLengthInDiameters = 2.1f;
-        [Tooltip("Authored quad width of one streak puff, as a fraction of the puck diameter. The " +
-                 "reference streak MEASURES 1.07 d wide as a component (0.68 d if only its clearly " +
-                 "warm core is counted). This is neither of those: it is what has to be AUTHORED " +
-                 "for 1.07 d to come back out of a capture, and additive blending plus bloom widen " +
-                 "a puff well past its quad. Measured: 0.994 authored rendered 1.69 d, so " +
-                 "0.994 * 1.07 / 1.69 = 0.629.")]
-        public float streakWidthInDiameters = 0.629f;
-        [Tooltip("Nearest and furthest droplet, in puck diameters behind the puck, ON SCREEN. " +
-                 "MEASURED 2.0 and 4.45.")]
-        public Vector2 dropletSpanInDiameters = new Vector2(2.0f, 4.45f);
+        // ------------------------------------------------------------------------------------
+        // THE TRAIL'S SHAPE IS CODE-OWNED, NOT SERIALIZED. [System.NonSerialized] is load-bearing.
+        //
+        // Buca.unity is hand-authored and must not be written by this tree, and it carries its own
+        // copies of these fields from the last time a builder wrote it (streakLength 2.1,
+        // streakWidth 0.629, screenToWorld 2.7). A serialized field is read from the SCENE, not
+        // from the initialiser here, so every previous round's numbers were overwritten by the
+        // scene the instant it loaded and the owner saw no change at all from them. Marking them
+        // NonSerialized makes Unity ignore the scene's stale keys - which stay in the YAML,
+        // harmlessly, without the file being touched - and makes the values below the ones that
+        // actually run. Do not put [SerializeField] or plain `public` back on them.
+        //
+        // MEASURED 2026-08-26 off ref_flight.png and after_flight.png at 1080x1728, by taking
+        // perpendicular profiles at fixed multiples of the puck's on-screen diameter behind the
+        // puck (reference d = 53 px, ours d = 44 px) and scoring WARMTH, R-B over the floor's own
+        // R-B, rather than luminance. Warmth is the right axis twice over: it is the thing the
+        // owner is complaining about, and it excludes the cyan rail and the bright floor spot that
+        // sit beside the trail in these two frames. BOTH earlier rounds measured luminance and both
+        // got the width backwards because of it - af2ae78 read the reference as 1.07 d, d2aaacc
+        // read ours as 1.69 d and halved the quad to 0.629, and the run I inherited read ours as a
+        // 2.10 d "bright slab" and was about to cut it again to 0.300. Reproduced here: the same
+        // profile scored on luminance returns 2.0-2.3 d for the reference because the blue rail
+        // clears floor+40 L.
+        //
+        // Warm width (R-B > 30), in puck diameters, at 0.25 / 0.50 / 0.75 / 1.00 / 1.25 / 1.50 / 1.75 d behind:
+        //   reference  1.50  1.44  1.36  1.22  1.06  0.54  0.14   <- widest at the source, then tapers away
+        //   ours       1.00  0.98  0.88  0.78  0.74  0.66  0.70   <- narrower than the reference AND parallel-sided
+        //
+        // So the owner is right and both re-measurements were wrong: ours is a THIN column, 33%
+        // narrower at the source than the reference, and it does not taper - it is still 0.52 d
+        // wide at 2.5 d behind, where the reference has been gone since 1.75. The reference plume
+        // is 1.5x the puck wide where it leaves the puck; that excess over the puck's own width is
+        // what reads as "flares slightly".
+        [Header("Trail shaped against the reference (measured; see the block above this in source)")]
 
-        [Tooltip("Screen puck-diameters -> world puck-diameters, along the shot. The reference " +
-                 "numbers above were read off a frame, so they are SCREEN lengths, and the shot " +
-                 "runs away from the camera: a world length along it is foreshortened before it " +
-                 "reaches the frame. MEASURED once, from our own scene rather than assumed - the " +
-                 "trail simulated at the solved launch speed put its furthest droplet 4.45 world " +
-                 "diameters out and 2.26 screen diameters out, giving 1.97. Shipping 1.97 and " +
-                 "measuring the CAPTURE back put the furthest countable droplet at 3.1 screen " +
-                 "diameters against the reference's 4.45, so the constant was re-measured off live " +
-                 "frames rather than the edit-mode simulation: 1.97 * 4.45 / 3.1 = 2.83, taken as " +
-                 "2.7. It is a single constant for a single shot direction, NOT a per-frame solve, " +
-                 "and the trail runs short on a ricochet that turns the puck across the camera.")]
-        public float screenToWorldAlongFlight = 2.7f;
-        [Tooltip("Authored quad diameters of a droplet, as a fraction of the puck diameter. The " +
-                 "reference droplets MEASURE 0.030..0.165 d. Authored at those numbers ours came " +
-                 "back at 0.065..0.347 - the same additive-plus-bloom widening the streak shows - " +
-                 "so these are scaled by 0.55 to land on the reference's measured range. What has " +
-                 "to survive the scaling is the RANGE: ~4.7x, not one repeated size.")]
-        public Vector2 dropletSizeInDiameters = new Vector2(0.020f, 0.094f);
-        [Tooltip("Droplets alive at once. MEASURED 9..13 warm components in the reference frame. " +
-                 "Set ABOVE that: at 11 our own capture only separated 4..8 above the same warmth " +
-                 "threshold, because the faintest of ours fall under it - the number that matters " +
-                 "is how many can be COUNTED off a frame, and that is what was measured on the " +
-                 "reference.")]
-        public int dropletCount = 16;
-        [Tooltip("Sideways wander of a droplet off the flight line, in puck diameters. The " +
-                 "reference reaches 1.46 d on its widest straggler. CHOSEN, not measured into: this " +
-                 "is a cap on a radial speed and only the widest droplet ever gets near it, so the " +
-                 "number here is not the number that will be measured back off a frame. Held below " +
-                 "the reference's widest because the arena is 6 world units across the right lane " +
-                 "and droplets thrown a full puck diameter and a half sideways cross the rail.")]
-        public float dropletScatterInDiameters = 0.9f;
+        /// <summary>Puck diameters behind the puck that the warm streak covers, ON SCREEN.
+        /// MEASURED: the reference's warmth is 140 at 0.25 d, 78 at 1.25 d, 43 at 1.50 d, 17 at
+        /// 1.75 d and 2 at 2.00 d, so the streak is over by 1.75 d. Ours held a flat 90-92 all the
+        /// way out to 2.50 d.</summary>
+        [System.NonSerialized] public float streakLengthInDiameters = 1.75f;
+
+        /// <summary>Authored quad width of one streak puff, as a fraction of the puck diameter.
+        /// Solved from a measured point rather than a model: 0.629 authored renders 1.00 d of warm
+        /// width at the source, so the authored-to-rendered factor is 1.59, and the reference's
+        /// 1.50 d needs 1.50 / 1.59 = 0.94. That lands within 6% of af2ae78's original 0.994, which
+        /// d2aaacc then cut by a third in the wrong direction.</summary>
+        [System.NonSerialized] public float streakWidthInDiameters = 0.94f;
+
+        /// <summary>Nearest and furthest droplet, in puck diameters behind the puck, ON SCREEN.
+        /// MEASURED on the reference: the countable warm droplets run 2.14 d to 5.58 d.</summary>
+        [System.NonSerialized] public Vector2 dropletSpanInDiameters = new Vector2(2.1f, 5.6f);
+
+        [Tooltip("FALLBACK ONLY. Screen puck-diameters -> world puck-diameters along the shot. " +
+                 "Every reference trail length was read off a FRAME, so it is a screen length, and a " +
+                 "world length along the shot is foreshortened before it reaches the frame. This used " +
+                 "to be a shipped constant of 2.7, solved once on the reference bank's opening leg, " +
+                 "which runs away from the camera.\n" +
+                 "THAT IS WHY THE TRAIL RAN LONG. The puck ricochets; most legs of a real shot run " +
+                 "ACROSS the screen, where there is no foreshortening at all, and the same world-space " +
+                 "lifetime then draws 2.7x further than it was solved to. Measured on after_flight.png, " +
+                 "a leg running across frame: our streak was still 0.52 d wide and warm at 2.5 puck " +
+                 "diameters behind, where the reference is gone by 1.75.\n" +
+                 "ResolveForeshortening now measures it from the camera and the puck's ACTUAL heading " +
+                 "every frame, so the trail is the same length on screen whichever way the shot is " +
+                 "going. This field is only used when there is no camera to measure with.")]
+        [System.NonSerialized] public float screenToWorldAlongFlight = 2.7f;
+
+        /// <summary>Authored quad diameters of a droplet, as a fraction of the puck diameter.
+        /// MEASURED rendered sizes: reference 0.075..0.491 d over seven countable droplets, ours
+        /// 0.091..0.341 from an authored 0.020..0.094. The low end is right; the top end is short,
+        /// and it is the RANGE that stops the field reading as one repeated mark. Scaling the top
+        /// end by the same authored-to-rendered factor the low end shows gives 0.135.</summary>
+        [System.NonSerialized] public Vector2 dropletSizeInDiameters = new Vector2(0.018f, 0.135f);
+
+        /// <summary>Droplets alive at once. MEASURED 13 warm components in the reference frame, of
+        /// which 7 clear R-B 25. Ours returned 4 real ones. Set above the count that must be
+        /// countable, because the faintest of ours fall under the threshold that counted them.</summary>
+        [System.NonSerialized] public int dropletCount = 18;
+
+        /// <summary>Sideways wander of a droplet off the flight line, in puck diameters.
+        /// MEASURED: the reference's droplets sit a mean 0.56 d off the flight axis and its widest
+        /// straggler 1.64 d. Ours sat a mean 0.13 d off it - four times too tidy, and that
+        /// on-axis regularity is most of why the owner reads them as an authored pattern rather
+        /// than as debris. This is a cap on a radial speed, so only the widest droplet approaches
+        /// it; raised to 2.4 to move the MEAN to the reference's 0.56.</summary>
+        [System.NonSerialized] public float dropletScatterInDiameters = 2.4f;
+
+        /// <summary>How many streak puffs are emitted per puff WIDTH of travel. The seams between
+        /// consecutive puffs are what the owner calls hard horizontal bands, and they are invisible
+        /// only while the gap is small against the puff. Stated per puff width rather than as a rate
+        /// so it survives any change to <see cref="streakWidthInDiameters"/>.</summary>
+        public const float SamplesPerPuffWidth = 16f;
+
         [Tooltip("World diameter of the drawn puck. Used only to convert the trail's " +
                  "puck-diameter units into world units; read off the renderer at Awake when it can " +
                  "be, this is the fallback.")]
@@ -225,6 +271,9 @@ namespace Case4
         Vector3 _impactDirection;
         float _impactNormalSpeed;
         Coroutine _postImpactGlide;
+        float _launchTime;
+        float _stackHitTime = -1f;
+        bool _bleeding;
 
         /// <summary>The puck's body. Null only if the scene was not built.</summary>
         public Rigidbody Body { get { return _rb; } }
@@ -255,6 +304,18 @@ namespace Case4
 
         /// <summary>True from the exact solver frame in which the puck first contacts a marked stack cube.</summary>
         public bool StackHit { get { return _stackHit; } }
+
+        /// <summary>
+        /// Seconds from the launch to the solver frame of the first stack contact; -1 if the puck has
+        /// not reached the stack. Recorded because "how long did this shot take to arrive" was the one
+        /// number that separated the shots that paid out from the ones that did not, and nothing in
+        /// the log carried it: FLIGHT prints how long the DIRECTOR waited, which on a shot that
+        /// arrived late is a different number entirely.
+        /// </summary>
+        public float TimeToStack { get { return _stackHitTime; } }
+
+        /// <summary>True while the flight step is deliberately bleeding the puck's energy off.</summary>
+        public bool Bleeding { get { return _bleeding; } }
 
         /// <summary>Puck radius used for the gate's pass-through test.</summary>
         public float PuckRadius
@@ -594,8 +655,14 @@ namespace Case4
             _trail = go.GetComponent<ParticleSystem>();
 
             ParticleSystemRenderer dropRenderer = go.GetComponent<ParticleSystemRenderer>();
-            if (dropRenderer != null && trailGlowMaterial != null)
-                dropRenderer.sharedMaterial = trailGlowMaterial;
+            if (dropRenderer != null)
+            {
+                Material round = ResolveRoundTrailMaterial();
+                if (round != null) dropRenderer.sharedMaterial = round;
+                Debug.Log("[Case4] TRAIL_DROPLET_MATERIAL " +
+                          (round != null ? round.name : "<none - the prefab's own sprite is being drawn>") +
+                          " (trailGlowMaterial wired=" + (trailGlowMaterial != null) + ")");
+            }
 
             if (_trail != null)
             {
@@ -609,7 +676,7 @@ namespace Case4
                 // droplet the reference draws is 4.45 puck diameters back, so that is the longest
                 // life; the shortest is set so droplets keep arriving over the whole span rather
                 // than all expiring together.
-                float k = Mathf.Max(0.1f, screenToWorldAlongFlight);
+                float k = ResolveForeshortening();
                 float farLife = dropletSpanInDiameters.y * k * d / speed;
                 float nearLife = Mathf.Max(0.02f, dropletSpanInDiameters.x * k * d / speed);
                 main.startLifetime = new ParticleSystem.MinMaxCurve(nearLife, farLife);
@@ -623,7 +690,15 @@ namespace Case4
                     dropletSizeInDiameters.x * d,
                     dropletSizeInDiameters.y * d);
                 main.startColor = new Color(1f, 0.90f, 0.55f, 1f);
-                main.startSpeed = new ParticleSystem.MinMaxCurve(0.3f, dropletScatterInDiameters * d / Mathf.Max(0.01f, farLife));
+                // Spacing, not just spread. A droplet's distance behind the puck is its age times
+                // the puck's speed, so a CONSTANT emission rate at a constant speed puts them at
+                // perfectly even intervals - which is the tidy vertical comb of identical marks the
+                // owner keeps pointing at. The sphere shape already randomises the DIRECTION; what
+                // was missing was enough magnitude for the along-track component to scatter them
+                // out of that comb. The range now spans an order of magnitude, so neighbours differ
+                // in both their offset along the line and their offset across it.
+                float scatterSpeed = dropletScatterInDiameters * d / Mathf.Max(0.01f, farLife);
+                main.startSpeed = new ParticleSystem.MinMaxCurve(0.4f * scatterSpeed, 3.2f * scatterSpeed);
                 main.gravityModifier = 0f;
 
                 // Both verification passes must emit the same droplets in the same places. A local
@@ -661,7 +736,7 @@ namespace Case4
             // thin line and not the white bloom ours drew. It is built from the same soft circle,
             // emitted fast enough that consecutive particles overlap into something continuous, and
             // ramped down in size so the shape tapers to a point behind the puck.
-            if (trailGlowMaterial != null)
+            if (ResolveRoundTrailMaterial() != null)
             {
                 GameObject glowGo = Instantiate(starTrailPrefab, puck);
                 glowGo.name = "PuckGlowTrail";
@@ -670,7 +745,7 @@ namespace Case4
                 glowGo.transform.localScale = Vector3.one;
                 _glowTrail = glowGo.GetComponent<ParticleSystem>();
                 ParticleSystemRenderer glowRenderer = glowGo.GetComponent<ParticleSystemRenderer>();
-                if (glowRenderer != null) glowRenderer.sharedMaterial = trailGlowMaterial;
+                if (glowRenderer != null) glowRenderer.sharedMaterial = ResolveRoundTrailMaterial();
 
                 if (_glowTrail != null)
                 {
@@ -683,14 +758,18 @@ namespace Case4
                     // against the CAPTURE, not against the texture, and no divisor is applied here.
                     float streakWidth = Mathf.Max(0.02f, streakWidthInDiameters * d);
                     float streakLife = Mathf.Max(0.02f,
-                        streakLengthInDiameters * Mathf.Max(0.1f, screenToWorldAlongFlight) * d / speed);
+                        streakLengthInDiameters * ResolveForeshortening() * d / speed);
 
                     ParticleSystem.MainModule glowMain = _glowTrail.main;
                     glowMain.simulationSpace = ParticleSystemSimulationSpace.World;
                     glowMain.playOnAwake = false;
                     glowMain.startLifetime = streakLife;
-                    glowMain.startColor = new Color(1f, 0.93f, 0.72f, 1f);   // pale and hot at the puck
-                    glowMain.startSize = new ParticleSystem.MinMaxCurve(streakWidth * 0.88f, streakWidth);
+                    // startColor MULTIPLIES the colour-over-lifetime ramp, so anything but white
+                    // here quietly re-tints every key that was just fitted to the reference. It used
+                    // to be (1, 0.93, 0.72), which pulled 28% of the blue out of the birth key and
+                    // then kept pulling it out of the brown tail as well. The ramp owns the colour.
+                    glowMain.startColor = Color.white;
+                    glowMain.startSize = new ParticleSystem.MinMaxCurve(streakWidth * 0.90f, streakWidth);
                     glowMain.startSpeed = 0f;                                 // the streak is the puck's own path
                     glowMain.gravityModifier = 0f;
 
@@ -701,8 +780,16 @@ namespace Case4
                     // apart, and they read as one streak only while that gap is small against the
                     // puff. Six samples per puff width is the smallest that left no beading in the
                     // capture.
+                    // THE BANDING. Consecutive puffs are speed/rate apart and each is streakWidth
+                    // across, so the seams are invisible only while that ratio is small. At the
+                    // shipped 6 the gap was a sixth of a puff - 0.137 world units against a 0.82
+                    // unit puff at the launch speed - and the capture shows exactly that: a chain of
+                    // discrete blobs, which is the "hard horizontal steps" in the owner's crop. The
+                    // condition is samples per PUFF WIDTH, so it holds at any width; 16 puts the
+                    // seam spacing at about 2.6 capture pixels at the launch speed, where spacing is
+                    // worst, which is below what a soft edge can show.
                     ParticleSystem.EmissionModule glowEmission = _glowTrail.emission;
-                    glowEmission.rateOverTime = 6f * speed / streakWidth;
+                    glowEmission.rateOverTime = SamplesPerPuffWidth * speed / streakWidth;
 
                     ParticleSystem.ShapeModule glowShape = _glowTrail.shape;
                     glowShape.enabled = true;
@@ -720,6 +807,157 @@ namespace Case4
                 }
             }
             SetTrail(false);
+        }
+
+        Material _fallbackRoundTrail;
+
+        /// <summary>
+        /// The soft ROUND sprite both trail layers draw with.
+        ///
+        /// <para>CHECKED, because the run I inherited had concluded the opposite and built this
+        /// fallback on it: in Buca.unity the field IS wired, to PFX_BucaSoft (guid
+        /// c4b10000f100f000000000000000c00a), whose _BaseMap is fx_softcircle.png - and that texture
+        /// is a true radial falloff, alpha 251 at the centre falling smoothly to 0, isotropic to
+        /// within 2/255 all the way round at r = 0.45. The four-pointed star, fx_star4.png, is
+        /// alpha 255 on the axes and 0 on the diagonals, and it reaches the puck only through
+        /// StarTrail.prefab's own renderer slot, which is overwritten below. So the stars in the
+        /// owner's crop are from the tree BEFORE af2ae78; our own capture at 07:23 already draws
+        /// round droplets.</para>
+        ///
+        /// <para>The fallback is kept anyway, and only for this: assigning the prefab's slot is the
+        /// single thing standing between a wired circle and the star, and if that field is ever
+        /// cleared the star comes back with no error and no log. It is insurance against a silent
+        /// regression of a defect the owner has already reported, not a diagnosis of the current
+        /// one.</para>
+        /// </summary>
+        Material ResolveRoundTrailMaterial()
+        {
+            if (trailGlowMaterial != null) return trailGlowMaterial;
+            if (_fallbackRoundTrail != null) return _fallbackRoundTrail;
+
+            Shader sh = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            if (sh == null) sh = Shader.Find("Universal Render Pipeline/Unlit");
+            if (sh == null) return null;
+
+            // A radial falloff generated here rather than looked up, so the fallback cannot itself
+            // depend on an asset reference that might also be missing.
+            const int N = 64;
+            Texture2D tex = new Texture2D(N, N, TextureFormat.RGBA32, false);
+            tex.name = "Case4_FallbackSoftCircle";
+            tex.wrapMode = TextureWrapMode.Clamp;
+            Color[] px = new Color[N * N];
+            for (int y = 0; y < N; y++)
+            {
+                for (int x = 0; x < N; x++)
+                {
+                    float dx = (x + 0.5f) / N * 2f - 1f;
+                    float dy = (y + 0.5f) / N * 2f - 1f;
+                    float r = Mathf.Sqrt(dx * dx + dy * dy);
+                    float a = Mathf.Clamp01(1f - r);
+                    a = a * a * (3f - 2f * a);
+                    px[y * N + x] = new Color(1f, 1f, 1f, a);
+                }
+            }
+            tex.SetPixels(px);
+            tex.Apply();
+
+            _fallbackRoundTrail = new Material(sh);
+            _fallbackRoundTrail.name = "Case4_FallbackRoundTrail";
+            if (_fallbackRoundTrail.HasProperty("_BaseMap")) _fallbackRoundTrail.SetTexture("_BaseMap", tex);
+            if (_fallbackRoundTrail.HasProperty("_MainTex")) _fallbackRoundTrail.SetTexture("_MainTex", tex);
+            _fallbackRoundTrail.SetFloat("_Surface", 1f);
+            _fallbackRoundTrail.SetFloat("_Blend", 2f);
+            _fallbackRoundTrail.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            _fallbackRoundTrail.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
+            _fallbackRoundTrail.SetFloat("_ZWrite", 0f);
+            _fallbackRoundTrail.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            _fallbackRoundTrail.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+
+            Debug.LogWarning("[Case4] TRAIL_MATERIAL_UNWIRED trailGlowMaterial is null. In the authored " +
+                             "scene it is wired to PFX_BucaSoft, so this is a REGRESSION, not the " +
+                             "normal path: a round soft-circle material was generated at runtime to " +
+                             "keep the prefab's four-pointed star off the screen. RE-WIRE THE FIELD.");
+            return _fallbackRoundTrail;
+        }
+
+        /// <summary>
+        /// How many world units along the puck's CURRENT heading it takes to cover one puck diameter
+        /// on screen, divided by how many it takes across the view. 1 means the heading runs square
+        /// across the frame and a world length draws at face value; larger means the heading runs
+        /// away from the camera and a world length is foreshortened before it reaches the frame.
+        ///
+        /// <para>Every trail length in this file was READ OFF A FRAME, so each is a screen length,
+        /// and turning one into a particle lifetime needs this factor. It used to be the shipped
+        /// constant <see cref="screenToWorldAlongFlight"/> = 2.7, solved once against the reference
+        /// bank's opening leg, which runs away from the camera. The puck ricochets: most legs of a
+        /// real shot run across the frame, where the true factor is close to 1, and the trail was
+        /// therefore drawn 2.7x longer than it was solved to be on every one of them. Measured on
+        /// after_flight.png - a leg running across frame - our streak was still 0.9 puck diameters
+        /// wide and 108 L above the floor at 5.0 diameters behind the puck, where the reference has
+        /// nothing at all past 1.25.</para>
+        /// </summary>
+        public float ResolveForeshortening()
+        {
+            Camera cam = Camera.main;
+            if (cam == null) cam = FindFirstObjectByType<Camera>(FindObjectsInactive.Include);
+            if (cam == null || puck == null) return Mathf.Max(0.1f, screenToWorldAlongFlight);
+
+            Vector3 heading = _lastDir;
+            heading.y = 0f;
+            if (heading.sqrMagnitude < 0.0001f) heading = referenceAimDir;
+            heading.y = 0f;
+            if (heading.sqrMagnitude < 0.0001f) return Mathf.Max(0.1f, screenToWorldAlongFlight);
+            heading.Normalize();
+
+            const float Probe = 1f;
+            Vector3 origin = puck.position;
+            Vector3 s0 = cam.WorldToScreenPoint(origin);
+            if (s0.z <= 0.01f) return Mathf.Max(0.1f, screenToWorldAlongFlight);
+
+            Vector3 sAlong = cam.WorldToScreenPoint(origin + heading * Probe);
+            Vector3 across = cam.transform.right;
+            across.y = 0f;
+            if (across.sqrMagnitude < 0.0001f) across = Vector3.right;
+            across.Normalize();
+            Vector3 sAcross = cam.WorldToScreenPoint(origin + across * Probe);
+            if (sAlong.z <= 0.01f || sAcross.z <= 0.01f) return Mathf.Max(0.1f, screenToWorldAlongFlight);
+
+            float pxAlong = new Vector2(sAlong.x - s0.x, sAlong.y - s0.y).magnitude;
+            float pxAcross = new Vector2(sAcross.x - s0.x, sAcross.y - s0.y).magnitude;
+            if (pxAlong < 0.5f || pxAcross < 0.5f) return Mathf.Max(0.1f, screenToWorldAlongFlight);
+
+            // Clamped, because a heading pointing almost straight at the camera sends this to
+            // infinity and a single frame of that would draw a trail across the whole arena.
+            return Mathf.Clamp(pxAcross / pxAlong, 0.35f, 4.0f);
+        }
+
+        /// <summary>
+        /// Re-solves the trail's lifetimes against the heading and the speed the puck has RIGHT NOW.
+        /// Particle lifetime is fixed at birth, so writing it every frame is what makes the trail the
+        /// same length on screen after a ricochet as it was before one - and what keeps it from
+        /// stretching out behind a puck that has slowed down.
+        /// </summary>
+        void UpdateTrailForHeading()
+        {
+            if (_trail == null && _glowTrail == null) return;
+            float d = ResolveDrawnDiameter();
+            float speed = Mathf.Max(1f, Speed);
+            float k = ResolveForeshortening();
+
+            if (_glowTrail != null)
+            {
+                ParticleSystem.MainModule glowMain = _glowTrail.main;
+                glowMain.startLifetime = Mathf.Max(0.02f, streakLengthInDiameters * k * d / speed);
+            }
+            if (_trail != null)
+            {
+                float farLife = Mathf.Max(0.03f, dropletSpanInDiameters.y * k * d / speed);
+                float nearLife = Mathf.Max(0.02f, dropletSpanInDiameters.x * k * d / speed);
+                ParticleSystem.MainModule main = _trail.main;
+                main.startLifetime = new ParticleSystem.MinMaxCurve(nearLife, farLife);
+                ParticleSystem.EmissionModule em = _trail.emission;
+                em.rateOverTime = dropletCount / Mathf.Max(0.01f, 0.5f * (nearLife + farLife));
+            }
         }
 
         /// <summary>
@@ -759,20 +997,45 @@ namespace Case4
 
         static Gradient WarmStreakGradient()
         {
+            // FITTED TO THE REFERENCE'S OWN SPINE, not chosen. The material is additive over the
+            // arena floor, whose measured colour is (98,113,127), so what lands on the frame is
+            // floor + contribution and the authored colour is only half of the answer. Reading the
+            // reference's brightest warm pixel across the plume at each distance behind the puck,
+            // and subtracting that floor, gives the contribution the sprite has to make:
+            //
+            //   behind   reference sRGB      contribution      reads as
+            //   0.25 d   (253, 252, 113)     (155, 139,   0)   white-YELLOW, G almost equal to R
+            //   0.50 d   (252, 186, 107)     (154,  73,   0)   saturated orange, G half of R
+            //   0.75 d   (208, 138,  95)     (110,  25,   0)   deep orange
+            //   1.25 d   (229, 172, 151)     (131,  59,  24)   burnt
+            //   1.50 d   (186, 147, 143)     ( 88,  34,  16)   brown, going out
+            //
+            // The blue contribution is ZERO the whole way down: the reference's B never rises above
+            // the floor's own 127 until the very end. Ours measured (254, 200, 163) - a +36 blue
+            // contribution - held FLAT from 1.0 d to 2.5 d. That flat pale-peach body, not the
+            // birth colour, is the "cold" the owner keeps pointing at, and it is why warming only
+            // the first key in the previous rounds changed nothing he could see.
+            //
+            // So: B is pinned near zero, G falls from 0.90 of R to 0.20 of R across the first half
+            // of the life, and the last key is the reference's brown. Alpha reaches zero at 0.88
+            // rather than 1.00 so the streak actually ENDS.
             Gradient g = new Gradient();
             g.SetKeys(
                 new GradientColorKey[]
                 {
-                    new GradientColorKey(new Color(0.992f, 0.980f, 0.678f), 0.00f),
-                    new GradientColorKey(new Color(0.980f, 0.776f, 0.635f), 0.12f),
-                    new GradientColorKey(new Color(0.953f, 0.706f, 0.600f), 0.40f),
-                    new GradientColorKey(new Color(0.737f, 0.588f, 0.569f), 1.00f),
+                    new GradientColorKey(new Color(1.000f, 0.900f, 0.030f), 0.00f),   // white-yellow, at the puck
+                    new GradientColorKey(new Color(1.000f, 0.560f, 0.010f), 0.20f),   // gold
+                    new GradientColorKey(new Color(1.000f, 0.280f, 0.000f), 0.45f),   // saturated orange body
+                    new GradientColorKey(new Color(0.780f, 0.240f, 0.060f), 0.72f),   // burnt
+                    new GradientColorKey(new Color(0.430f, 0.180f, 0.070f), 1.00f),   // brown tail
                 },
                 new GradientAlphaKey[]
                 {
-                    new GradientAlphaKey(0.95f, 0.00f),
-                    new GradientAlphaKey(0.62f, 0.35f),
-                    new GradientAlphaKey(0.18f, 0.72f),
+                    new GradientAlphaKey(1.00f, 0.00f),
+                    new GradientAlphaKey(0.92f, 0.30f),
+                    new GradientAlphaKey(0.68f, 0.62f),
+                    new GradientAlphaKey(0.30f, 0.82f),
+                    new GradientAlphaKey(0.06f, 0.94f),
                     new GradientAlphaKey(0.00f, 1.00f),
                 });
             return g;
@@ -789,10 +1052,18 @@ namespace Case4
             g.SetKeys(
                 new GradientColorKey[]
                 {
-                    new GradientColorKey(new Color(0.988f, 0.686f, 0.373f), 0.00f),
-                    new GradientColorKey(new Color(0.965f, 0.784f, 0.451f), 0.35f),
-                    new GradientColorKey(new Color(0.753f, 0.725f, 0.569f), 0.70f),
-                    new GradientColorKey(new Color(0.616f, 0.608f, 0.553f), 1.00f),
+                    // MEASURED, and this one was already close: the reference's seven countable
+                    // droplets peak at R-B 28..87 (mean 56) and ours at 84..95, so ours are if
+                    // anything MORE saturated than the reference's, which read (238,217,151) and
+                    // (236,218,161) - a pale gold with G high, not a deep orange. The correction
+                    // that was needed is at the END: the old 0.70 and 1.00 keys had R, G and B
+                    // within 0.06 of each other, which over the floor is a grey speck rather than a
+                    // cooling ember. G is lifted toward the reference's pale gold at birth and blue
+                    // held down through the tail.
+                    new GradientColorKey(new Color(1.000f, 0.860f, 0.330f), 0.00f),
+                    new GradientColorKey(new Color(1.000f, 0.720f, 0.230f), 0.35f),
+                    new GradientColorKey(new Color(0.880f, 0.520f, 0.150f), 0.70f),
+                    new GradientColorKey(new Color(0.600f, 0.320f, 0.100f), 1.00f),
                 },
                 new GradientAlphaKey[]
                 {
@@ -820,10 +1091,27 @@ namespace Case4
         /// what turns a line of equal puffs into the reference's flare.</summary>
         static AnimationCurve StreakTaperCurve()
         {
+            // MEASURED off the reference, and it is MONOTONIC - it does not pinch and re-open.
+            // Warm width (R-B > 30) at 0.25 / 0.50 / 0.75 / 1.00 / 1.25 / 1.50 / 1.75 d behind is
+            // 1.50 / 1.44 / 1.36 / 1.22 / 1.06 / 0.54 / 0.14 puck diameters. Divided by the width
+            // at the source, and with the distance expressed as a fraction of the 1.75 d life:
+            //
+            //   life  0.14  0.29  0.43  0.57  0.71  0.86  1.00
+            //   width 1.00  0.96  0.91  0.81  0.71  0.36  0.09
+            //
+            // A slow taper that holds most of its width for two thirds of the life, then collapses.
+            // The run I inherited put a bump at 0.55 to make the plume "flare", from widths read on
+            // LUMINANCE, where the cyan rail beside the reference plume clears the threshold and
+            // fakes a second opening. There is no bump in the warmth profile. The flare the owner
+            // describes is not a bulge in the middle - it is that the plume leaves the puck 1.5x
+            // the puck's own width, which streakWidthInDiameters is what delivers.
             AnimationCurve c = new AnimationCurve();
             c.AddKey(new Keyframe(0.00f, 1.00f));
-            c.AddKey(new Keyframe(0.45f, 0.52f));
-            c.AddKey(new Keyframe(1.00f, 0.06f));
+            c.AddKey(new Keyframe(0.29f, 0.96f));
+            c.AddKey(new Keyframe(0.57f, 0.81f));
+            c.AddKey(new Keyframe(0.71f, 0.71f));
+            c.AddKey(new Keyframe(0.86f, 0.36f));
+            c.AddKey(new Keyframe(1.00f, 0.09f));
             return c;
         }
 
@@ -1172,6 +1460,9 @@ namespace Case4
             _flying = true;
             _nextBounceAt = 0f;
             _stackHit = false;
+            _launchTime = Time.time;
+            _stackHitTime = -1f;
+            _bleeding = false;
             _impactCollider = null;
             _impactPoint = puck.position;
             _impactDirection = d;
@@ -1188,15 +1479,42 @@ namespace Case4
         }
 
         /// <summary>
+        /// Slows a puck that is STILL IN ITS SHOT, so a bank that has outrun the shot's pacing budget
+        /// comes to a stop instead of ricocheting on the arena's 0.965-bounciness rails for another
+        /// several seconds. Deliberately NOT <see cref="Calm"/>: Calm clears <c>_flying</c>, which
+        /// makes <see cref="NotifyCollision"/> return immediately, and a puck that is blind to
+        /// contacts can roll into the stack and shove it about with raw physics while the launcher
+        /// reports it never touched anything. This keeps the contact path live all the way down to
+        /// rest, so a late arrival is still a real, armed, counted stack hit.
+        /// </summary>
+        public void BleedOff()
+        {
+            if (_rb == null || _bleeding) return;
+            _bleeding = true;
+            _rb.linearDamping = restingDamping;
+            Debug.Log(string.Format(
+                "[Case4] PUCK_BLEEDOFF damping {0:0.0} applied at speed {1:0.00} after {2:0.000}s of flight; " +
+                "contacts stay live",
+                restingDamping, Speed, Time.time - _launchTime));
+        }
+
+        /// <summary>
         /// Bleeds the puck's energy off once the shot has done its job, so the shot does not loop.
         ///
         /// ONLY REACHES A SHOT THAT MISSED. On any shot that connects, BeginPostImpactGlide has
         /// already zeroed the velocity and set isKinematic on the solver frame of the stack contact,
         /// and linearDamping on a kinematic body does nothing - so restingDamping, the whole `calmed`
         /// branch in the director's collapse loop, and puckCalmDelay's 1.25 s all apply to the
-        /// timed-out path and nothing else. SetTrail(false) is likewise already done, by the same
-        /// contact. Kept because the miss path is reachable: the flight loop can hit flightTimeout
-        /// without a stack contact, and there the body is still dynamic and this is what stops it.
+        /// missed path and nothing else. SetTrail(false) is likewise already done, by the same
+        /// contact.
+        ///
+        /// <para>It used to say "the flight loop can hit flightTimeout without a stack contact, and
+        /// there the body is still dynamic and this is what stops it" - i.e. it treated the timeout as
+        /// PROOF of a miss. It was not: the timeout only said the director had stopped waiting. A shot
+        /// still travelling at 25 u/s when the 2.40 s budget ran out reached the stack a second later,
+        /// and by then this method had already been called and had blinded the contact path. The
+        /// flight step now resolves the shot before anything calls Calm, so by the time it runs the
+        /// puck has either hit the stack or genuinely stopped.</para>
         /// </summary>
         public void Calm()
         {
@@ -1277,6 +1595,10 @@ namespace Case4
             _lastDir = dir;
 
             if (_visual != null) _visual.rotation = Quaternion.LookRotation(dir, Vector3.up);
+
+            // The heading has just been updated, so the trail's screen length is re-solved against
+            // it. A ricochet changes the foreshortening by up to 2.7x and nothing used to notice.
+            if (_flying) UpdateTrailForHeading();
         }
 
         /// <summary>
@@ -1300,6 +1622,7 @@ namespace Case4
                 if (!_stackHit && entered)
                 {
                     _stackHit = true;
+                    _stackHitTime = Time.time - _launchTime;
                     _flightDistance = _distance;
                     _impactCollider = collision.collider;
                     _impactPoint = collision.contactCount > 0 ? cp.point : puck.position;
