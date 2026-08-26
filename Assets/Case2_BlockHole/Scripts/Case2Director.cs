@@ -398,7 +398,10 @@ namespace Case2
             // lip/cavity tint (Spend). Either one on its own leaves the other still announcing a
             // hole that is no longer there, or - as it did - kills the outline while the board is
             // still on its way back.
-            while (Time.time < tTilesFlush) yield return null;
+            // Wait for the tiles THEMSELVES, with the computed bound only as a backstop. Hanging
+            // this on the bound alone meant every tuning change to the stagger or the arc quietly
+            // moved when the outline was released, which is why it kept going early.
+            while (hole.TilesRising || Time.time < tTilesFlush) yield return null;
             hole.SetLit(false);
             hole.Spend(spentFadeDuration);
             if (record) EndStep();

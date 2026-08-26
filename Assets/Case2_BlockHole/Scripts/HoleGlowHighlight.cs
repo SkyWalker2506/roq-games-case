@@ -382,7 +382,7 @@ namespace Case2
         // NonSerialized: every hole in the scene carries its own 0.21, which would override this.
         // Owner-directed deviation from the measured 200-230 ms - at the reference's speed the tiles
         // read as a flicker rather than as blocks arriving, so the arc is roughly doubled.
-        [System.NonSerialized] public float tileRiseDuration = 2f;
+        [System.NonSerialized] public float tileRiseDuration = 0.9f;
 
         [Tooltip("Fraction of the arc spent climbing to flush. Measured: cell (2,2) crossed the board "
             + "plane at f66 of a f63-f70 motion, so about half.")]
@@ -392,7 +392,7 @@ namespace Case2
             + "66-74 at 30 fps, i.e. 267 ms.")]
         /// <summary>Seconds the per-cell start times are spread over. 0.8: the arcs are 2 s now,
         /// and a 0.27 spread across a 2 s move is not a stagger, it is a rounding error.</summary>
-        [System.NonSerialized] public float tileRiseStagger = 0.8f;
+        [System.NonSerialized] public float tileRiseStagger = 0.3f;
 
         Transform[] _cellTiles;
         Vector3[] _cellTileHome;
@@ -644,6 +644,18 @@ namespace Case2
         public float RiseTotalSeconds { get { return tileRiseStagger + tileRiseDuration * 1.2f; } }
 
         /// <summary>
+        /// True while ANY cell tile is still moving.
+        ///
+        /// The estimate above is an upper bound and the caller was hanging the outline's release on
+        /// it; an upper bound is the wrong instrument for "is it finished", because every change to
+        /// the stagger or the arc silently changes the answer. This counts the arcs in flight, so
+        /// the release lands on the last tile settling whatever those numbers are.
+        /// </summary>
+        public bool TilesRising { get { return _risingTiles > 0; } }
+
+        int _risingTiles;
+
+        /// <summary>
         /// Deterministic 0..1 from an integer. Same cell, same value, every run - the variation has
         /// to survive a replay or the frame strip stops being comparable between captures.
         /// </summary>
@@ -664,6 +676,7 @@ namespace Case2
             // the same tile write the same transform in the same frame and the loser wins by
             // execution order, which is not a thing any measurement can pin down.
             SnapCellTilesHome();
+            _risingTiles = 0;
             for (int i = 0; i < _cellTiles.Length; i++)
             {
                 if (_cellTiles[i] == null) continue;
@@ -728,6 +741,7 @@ namespace Case2
             float end = Time.time + delay;
             while (Time.time < end) yield return null;
 
+            _risingTiles++;
             float start = Time.time;
             // +/-20% on the arc length, so two tiles that start together do not finish together.
             float dur = Mathf.Max(0.01f, tileRiseDuration * (0.8f + 0.4f * Hash01(i * 2)));
@@ -741,6 +755,7 @@ namespace Case2
             }
             if (t != null) t.position = home;      // exact, not recomputed
             SetTileVisible(i, true);
+            _risingTiles--;
         }
 
         /// <summary>
