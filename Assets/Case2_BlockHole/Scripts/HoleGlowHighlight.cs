@@ -392,7 +392,7 @@ namespace Case2
             + "66-74 at 30 fps, i.e. 267 ms.")]
         /// <summary>Seconds the per-cell start times are spread over. 0.8: the arcs are 2 s now,
         /// and a 0.27 spread across a 2 s move is not a stagger, it is a rounding error.</summary>
-        [System.NonSerialized] public float tileRiseStagger = 0.3f;
+        [System.NonSerialized] public float tileRiseStagger = 0.12f;
 
         Transform[] _cellTiles;
         Vector3[] _cellTileHome;
@@ -578,6 +578,35 @@ namespace Case2
         /// the cube's own mesh.
         /// </para>
         /// </summary>
+        static readonly int ClipMinYId = Shader.PropertyToID("_ClipMinY");
+        MaterialPropertyBlock _tileMpb;
+
+        /// <summary>
+        /// Puts the tray-floor clip on or off ONE cell tile.
+        ///
+        /// A tile is 3 units deep so a rising one has a wall to show, and the board's border is 0.08
+        /// units tall, so a RESTING tile hangs plainly underneath - that is the dark band below the
+        /// board. Clipping every tile all the time fixes that and destroys the climb, because the
+        /// climb happens below the floor. Clipping only the ones standing still does both: the board
+        /// has no underside, and a tile in flight is drawn whole, which is right - it is inside an
+        /// opening the player is deliberately looking into.
+        ///
+        /// Per-renderer through a property block, so the shared board materials are untouched.
+        /// </summary>
+        void SetTileClipped(int i, bool clipped)
+        {
+            if (_cellTileRenderers == null || i >= _cellTileRenderers.Length) return;
+            Renderer r = _cellTileRenderers[i];
+            if (r == null) return;
+            if (_tileMpb == null) _tileMpb = new MaterialPropertyBlock();
+            r.GetPropertyBlock(_tileMpb);
+            _tileMpb.SetFloat(ClipMinYId, clipped ? TrayFloorY : -1000f);
+            r.SetPropertyBlock(_tileMpb);
+        }
+
+        /// <summary>World height of the tray floor: the frame's own underside.</summary>
+        public const float TrayFloorY = -0.02f;
+
         void SetTileVisible(int i, bool visible)
         {
             if (_cellTileRenderers == null || i >= _cellTileRenderers.Length) return;
@@ -742,6 +771,7 @@ namespace Case2
             while (Time.time < end) yield return null;
 
             _risingTiles++;
+            SetTileClipped(i, false);      // in flight: drawn whole, wall and all
             float start = Time.time;
             // +/-20% on the arc length, so two tiles that start together do not finish together.
             float dur = Mathf.Max(0.01f, tileRiseDuration * (0.8f + 0.4f * Hash01(i * 2)));
@@ -755,6 +785,7 @@ namespace Case2
             }
             if (t != null) t.position = home;      // exact, not recomputed
             SetTileVisible(i, true);
+            SetTileClipped(i, true);       // home: the body goes back under the floor
             _risingTiles--;
         }
 
@@ -776,15 +807,30 @@ namespace Case2
         /// </summary>
         public float RiseCurve(float k)
         {
+            // LINEAR, with the only easing at the top. The owner: "linear hareket etsinler, sadece
+            // sona dogru en tepede yavaslayip geri hareket edebilirler, birden hiz degismesin."
+            //
+            // The old curve was eased at both ends of both halves - OutQuad up to the plane, then a
+            // sin(sqrt(v)) arch - so the tile changed speed four times in one move and never held a
+            // constant one. Constant speed on the way up and on the way down, with a single smooth
+            // turn at the apex, is one speed change instead of four.
             float cross = Mathf.Clamp(tileRiseCrossFraction, 0.05f, 0.95f);
             if (k < cross)
             {
+                // Straight up from the depth to the board plane. No ease-in, no ease-out.
                 float u = Mathf.Clamp01(k / cross);
-                float outQuad = 1f - (1f - u) * (1f - u);
-                return -tileRiseDepth * (1f - outQuad);
+                return -tileRiseDepth * (1f - u);
             }
+
+            // Above the plane: up to the peak at constant speed, a rounded turn, then back down at
+            // constant speed. smoothstep on a narrow band around the apex is what rounds it; outside
+            // that band the triangle is untouched, so the travel really is linear.
             float v = Mathf.Clamp01((k - cross) / (1f - cross));
-            return Mathf.Sin(Mathf.Sqrt(v) * Mathf.PI) * tileRiseHeight;
+            float tri = 1f - Mathf.Abs(2f * v - 1f);                 // 0 -> 1 -> 0, straight sides
+            const float Turn = 0.22f;                                 // how much of the arc is the turn
+            float near = Mathf.Clamp01((tri - (1f - Turn)) / Turn);   // 0 outside the apex band, 1 at it
+            float round = near * near * (3f - 2f * near) - near;      // smoothstep minus the line
+            return (tri + round * Turn * 0.5f) * tileRiseHeight;
         }
 
         /// <summary>Deepest point below the board any of this hole's tiles is currently at. Read by the gate.</summary>

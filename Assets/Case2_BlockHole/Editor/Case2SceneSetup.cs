@@ -746,6 +746,7 @@ public static class Case2SceneSetup
             m.SetFloat("_BevelLift", 0.42f);
             m.SetFloat("_BevelLiftZ", 0.16f);
             m.SetFloat("_ShadeWidth", 0.085f);
+                    m.SetFloat("_ClipMinY", HoleGlowHighlight.TrayFloorY);
         });
         Material navyB = EnsureMaterial(MaterialDir + "/Case2_BoardNavy_B.mat", "Case2/BoardTile", m =>
         {
@@ -757,6 +758,7 @@ public static class Case2SceneSetup
             m.SetFloat("_BevelLift", 0.42f);
             m.SetFloat("_BevelLiftZ", 0.16f);
             m.SetFloat("_ShadeWidth", 0.085f);
+                    m.SetFloat("_ClipMinY", HoleGlowHighlight.TrayFloorY);
         });
         if (navyA == null || navyB == null) return;
 

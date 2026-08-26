@@ -30,6 +30,12 @@ Shader "Case2/BoardTile"
         _BevelContrast("Bevel Contrast (legacy, unused)", Range(0, 1)) = 0.20
         _VerticalGrad("Board Vertical Gradient", Range(0, 0.5)) = 0.05
 
+        // Tiles are 3 units deep so a rising one has a wall to show; the border is 0.08 units tall,
+        // so a RESTING tile would hang under the board. Nothing below this world height is drawn.
+        // HoleGlowHighlight lifts it per-renderer while a tile is in flight, because that part of
+        // the climb happens below the floor and is exactly what should be seen through the opening.
+        _ClipMinY("Clip Below World Y", Float) = -0.02
+
         // Grout groove. _SeamWidth is the FLAT floor half-width; _SeamSoft is the ramp out of
         // it. Reference groove: ~4.2% of the cell at half depth, floor at 0.53x the face.
         _SeamWidth("Grout Floor Half-Width (cell fraction)", Range(0.002, 0.08)) = 0.022
@@ -97,6 +103,7 @@ Shader "Case2/BoardTile"
             float _GradZ;
             float _FaceLevel;
             float _ShadowStrength;
+                float  _ClipMinY;
             CBUFFER_END
 
             struct Attributes
@@ -124,6 +131,8 @@ Shader "Case2/BoardTile"
 
             half4 frag(Varyings input) : SV_Target
             {
+                clip(input.positionWS.y - _ClipMinY);
+
                 // Per-tile UV in OBJECT space. Every Tile_i_j is its own unit cube sitting on a
                 // cell centre, so positionOS.xz + 0.5 is an exact [0..1] cell. This must not go
                 // back to frac(positionWS.xz): the Board root carries a 0.5 z offset, which put

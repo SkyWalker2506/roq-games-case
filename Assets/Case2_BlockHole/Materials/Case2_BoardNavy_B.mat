@@ -100,6 +100,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _ShadowStrength: 0.38
+    - _ClipMinY: -0.02
     - _SeamWidth: 0.022
     - _SeamSoft: 0.02
     - _SeamDarkness: 0.55
