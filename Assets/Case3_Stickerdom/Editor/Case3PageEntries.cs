@@ -454,6 +454,8 @@ public static class Case3PageEntries
         // attempt produced no frame. fontMaterial, not fontSharedMaterial: shared would turn the
         // outline on for every TextMeshPro in the project using this font.
         Material counterMat = tmp.fontMaterial;
+        // Weight from the SDF rather than faux-bold; see StyleCounter in Case3Director.
+        counterMat.SetFloat(TMPro.ShaderUtilities.ID_FaceDilate, 0.22f);
         counterMat.EnableKeyword("OUTLINE_ON");
         counterMat.SetColor(TMPro.ShaderUtilities.ID_OutlineColor, Color.black);
         counterMat.SetFloat(TMPro.ShaderUtilities.ID_OutlineWidth, 0.28f);

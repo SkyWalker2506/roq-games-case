@@ -581,6 +581,13 @@ namespace Case3
             tmp.fontStyle = TMPro.FontStyles.Bold;
 
             Material m = tmp.fontMaterial;
+
+            // WEIGHT comes from the SDF, not from FontStyles.Bold. Bold on a font with no bold face
+            // is faux-bold - TMP smears the glyph sideways and the result is wider, not heavier, and
+            // it fights the outline for the same pixels. _FaceDilate pushes the distance-field
+            // boundary outward instead, which is what actually thickens a stroke.
+            m.SetFloat(TMPro.ShaderUtilities.ID_FaceDilate, 0.22f);
+
             m.EnableKeyword("OUTLINE_ON");
             m.SetColor(TMPro.ShaderUtilities.ID_OutlineColor, Color.black);
             m.SetFloat(TMPro.ShaderUtilities.ID_OutlineWidth, 0.28f);
