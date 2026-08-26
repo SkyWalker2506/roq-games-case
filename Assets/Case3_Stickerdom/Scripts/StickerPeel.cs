@@ -85,7 +85,20 @@ namespace Case3
         public bool fallbackFromName = true;
 
         [Tooltip("Cylinder radius as a fraction of the sticker's longest side. Larger = looser roll.")]
-        public float radiusFactor = 0.105f;
+        // MEASURED against the reference clip, not chosen. Frame by frame over the peel, the white
+        // area on the page roughly DOUBLES - 47,300 px before the lift, 93,100 px at the peak - because
+        // the sheet folds over and shows its full-size white back. Ours went 36,400 -> 37,000: no
+        // increase at all, because at radiusFactor 0.105 the flap is rolled into a tube about a tenth
+        // of the sheet's width and there is nothing of it to see.
+        //
+        // maxAngle was never the problem - it is already PI, so the flap does turn a full 180 and IS a
+        // mirror of the art. The radius is what decides whether that turn reads as a page folding over
+        // or as paper rolled round a pencil.
+        //
+        // NonSerialized: Stickerdom.unity carries 0.105 on most stickers (and 0.34 on two, which are
+        // the ones that already looked closest), and a serialized field is read from the SCENE. Fifth
+        // time today; the scene is the owner's and not ours to write.
+        [System.NonSerialized] public float radiusFactor = 0.38f;
 
         [Tooltip("Wrap is clamped here. EXACTLY pi and nothing else: at pi cos(theta) = -1, so the flap " +
                  "past the roll is a rigid 1:1 mirror of the sheet and the peeled paper keeps the " +
