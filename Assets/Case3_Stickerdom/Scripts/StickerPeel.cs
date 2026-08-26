@@ -318,6 +318,9 @@ namespace Case3
         /// </summary>
         public void Prepare()
         {
+            // Same stale-flag guard as SetMeshMode: if the mesh this was built around is gone, the
+            // build has to happen again, whatever the flag says.
+            if (_built && (_renderer == null || _meshGo == null || _mesh == null)) _built = false;
             if (_built || sticker == null || sticker.sprite == null) return;
 
             _mesh = StickerMeshBuilder.Build(sticker.sprite, segments, out _localMin, out _localMax);
@@ -371,8 +374,14 @@ namespace Case3
         public void SetMeshMode(bool on)
         {
             if (sticker == null) return;
+            // A Unity object that has been destroyed compares equal to null while the C# reference is
+            // still non-null, so `_built` can outlive the renderer it describes - a domain reload, a
+            // play-mode entry, or an editor-time Prepare() whose GameObject was cleaned up afterwards
+            // all produce that state. Writing to it throws MissingReferenceException. Treat it as
+            // not-built and rebuild, rather than trusting a flag over the object it refers to.
+            if (_built && (_renderer == null || _meshGo == null)) _built = false;
             if (on) Prepare();
-            if (!_built) return;
+            if (!_built || _renderer == null) return;
 
             _meshMode = on;
             _renderer.enabled = on;
@@ -395,6 +404,7 @@ namespace Case3
         /// </summary>
         public void SetProgress(float progress01)
         {
+            if (_built && (_renderer == null || _meshGo == null)) _built = false;
             if (!_built) return;
 
             _progress = Mathf.Clamp01(progress01);
