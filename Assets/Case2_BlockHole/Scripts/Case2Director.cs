@@ -342,11 +342,16 @@ namespace Case2
 
             // ---------------------------------------------------------- sink + close
             if (record) BeginStep("sink-close");
-            // The opening has been fed, so it stops advertising itself. The reference's cross hole
-            // is still fully lit at 1.60 (arm cell mean L=141) and already dark at 1.95 (L=79), and
-            // the pit does not begin to CLOSE until 2.20 here - so the extinguish is its own beat
-            // early in the sink, not part of the seal.
-            hole.Spend(spentFadeDuration);
+            // The opening keeps its shape for the WHOLE fall. The owner: "delik kapanip kareler
+            // gelmeden once delik sekli kalsin, delik dolduktan sonra kaybolsun."
+            //
+            // DEVIATION from the reference, recorded rather than fitted. The cross hole there is still
+            // fully lit at 1.60 (arm cell mean L=141) and already dark at 1.95 (L=79) while the pit
+            // does not begin to close until 2.20, so the extinguish is its own beat early in the sink.
+            // Spending it there left a stretch where the hole had stopped reading as a hole and the
+            // tiles had not yet arrived - nothing was announcing what the shards were falling into.
+            // Spend now runs with the seal, so the opening is a hole until it is filled and stops
+            // being one at the moment it stops being one.
             AudioService.Play(SfxId.DebrisFall);
             yield return WaitUntil(tSink);
 
@@ -364,6 +369,7 @@ namespace Case2
             // pops. Those two lines are what renders. FlashSeal does NOT - it drives _glow, and
             // ApplyGlow disables the glow plate every frame - so do not read the line below as
             // part of the seal's look.
+            hole.Spend(spentFadeDuration);
             hole.ClosePit(closeDuration);
             // The board coming back is a MOTION in the reference, not a fade: each cell's tile pops
             // up out of the sealing cavity and settles flush, staggered across the opening. Measured
