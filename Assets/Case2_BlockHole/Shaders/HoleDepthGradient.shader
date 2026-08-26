@@ -77,9 +77,30 @@ Shader "Case2/HoleDepthGradient"
         // it is, and a transect there reads the halo as starting late.
         _GlowStrength("Target Glow (0 = dark, 1 = lit)", Range(0, 1)) = 0
         _GlowColor("Target Glow Colour (the hole's own)", Color) = (1, 1, 1, 1)
-        _GlowReach("Glow Reach Outside (cells)", Range(0, 1)) = 0.32
-        _GlowCore("Glow Saturated Core (cells)", Range(0, 0.5)) = 0.08
+        _GlowReach("Glow Reach Outside (cells)", Range(0, 1)) = 0.28
+        _GlowCore("Glow Saturated Core (cells)", Range(0, 0.5)) = 0.03
         _GlowPeak("Glow Alpha in the core", Range(0, 1)) = 1.0
+        // The band was too WIDE and too FLAT. Half-width is the honest way to compare, because
+        // core and reach trade against each other: smoothstep(reach, core, d) is at half at
+        // (core + reach) / 2.
+        //   reference, from the transect above: +126 at 0.048 cells, +27.8 at 0.217, so half of
+        //     the peak falls at 0.156 cells.
+        //   ours before: core 0.08, reach 0.32 -> half at 0.200 cells, 28% too wide.
+        //   ours now:    core 0.03, reach 0.28 -> half at 0.155 cells.
+        // Nothing else about the falloff shape is claimed; only the half-width is matched.
+        _GlowHot("Glow rim whiteness (0 = the hole colour, 1 = white)", Range(0, 1)) = 0.55
+        _GlowGain("Glow rim gain above 1", Range(1, 2)) = 1.15
+        // The owner asks for a moving, wavy outline. MEASURED, on the reference's green hole over
+        // f206-f260, sampling a 0.04-0.30 cell ring split into eight angular sectors: after the
+        // global level is divided out the sectors still swing 15-32% independently of one another,
+        // so the outline is NOT static. A whole-ring average misses this entirely, which is how
+        // the note on pulseHz came to read "holds flat to within 1.4%" - it measured the aggregate.
+        // AMPLITUDE is taken from that 20%-ish per-sector swing. LOBES and SPEED are CHOSEN, not
+        // measured: the footage is 65 fps over a short hold and would not settle a period without
+        // more time than this was worth.
+        _GlowWaveAmp("Glow wave amplitude (fraction of reach)", Range(0, 0.6)) = 0.20
+        _GlowWaveLobes("Glow wave lobes around the outline", Range(1, 16)) = 6
+        _GlowWaveSpeed("Glow wave travel (revolutions/sec)", Range(0, 4)) = 0.9
     }
     SubShader
     {
@@ -115,6 +136,11 @@ Shader "Case2/HoleDepthGradient"
             float _GlowReach;
             float _GlowCore;
             float _GlowPeak;
+            float _GlowHot;
+            float _GlowGain;
+            float _GlowWaveAmp;
+            float _GlowWaveLobes;
+            float _GlowWaveSpeed;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
@@ -375,8 +401,29 @@ Shader "Case2/HoleDepthGradient"
                 // On dOut, the exact outside distance - see GetOuterSDF. Reading d here is what
                 // lit the plus's four notch cells. sign(dOut) == sign(d) everywhere, so step()
                 // keeps meaning exactly "strictly outside the opening".
-                float haloT = smoothstep(_GlowReach, min(_GlowCore, _GlowReach - 1e-4), dOut) * step(0.0, dOut);
-                col = lerp(col, _GlowColor.rgb, saturate(_GlowStrength * _GlowPeak) * haloT);
+                //
+                // The band now TRAVELS along the outline instead of sitting still. The wave rides
+                // the angle around the hole pivot, so a lobe walks around the silhouette rather
+                // than the whole ring breathing in and out - which is what the per-sector
+                // measurement says the reference does. It modulates REACH only: the core stays
+                // put, so the inner edge still hugs the rim and only the falloff breathes.
+                float ang = atan2(p.y, p.x);
+                float wave = sin(ang * _GlowWaveLobes - _Time.y * _GlowWaveSpeed * 6.2831853);
+                float reach = max(_GlowReach * (1.0 + _GlowWaveAmp * wave), 1e-3);
+                float core = min(_GlowCore, reach - 1e-4);
+
+                float haloT = smoothstep(reach, core, dOut) * step(0.0, dOut);
+
+                // Hotter at the rim, and only at the rim. "Thinner" and "brighter" trade against
+                // each other through bloom, so the extra brightness is spent on a NARROW inner
+                // band - whitened towards the light-source read and lifted a little past 1 - while
+                // the band as a whole got narrower. Total emitted energy goes down, not up, so
+                // this should not add bleed even though the core reads hotter.
+                float rimT = saturate(1.0 - dOut / max(reach * 0.45, 1e-4));
+                float3 hot = lerp(_GlowColor.rgb, float3(1.0, 1.0, 1.0), _GlowHot * rimT);
+                hot *= lerp(1.0, _GlowGain, rimT);
+
+                col = lerp(col, hot, saturate(_GlowStrength * _GlowPeak) * haloT);
 
                 return half4(col, 1.0);
             }

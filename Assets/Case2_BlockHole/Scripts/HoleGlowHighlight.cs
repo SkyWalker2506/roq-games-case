@@ -89,6 +89,30 @@ namespace Case2
             + "the scene's authored glowGain 0.48 got wrong.")]
         [Range(0f, 1f)] public float glowPeakAlpha = 1.0f;
 
+        [Header("Halo band shape and motion")]
+        [Tooltip("How far the rim is pushed towards white. Spends the 'brighter' budget on a narrow "
+            + "inner band rather than on the whole halo, because a wide bright band is exactly the "
+            + "blur being complained about.")]
+        [Range(0f, 1f)] public float glowRimWhiteness = 0.55f;
+
+        [Tooltip("How far past 1 the rim is lifted so it reads as a light source. Kept small: "
+            + "bloom lives in the CaseGrades asset and is not ours to retune.")]
+        [Range(1f, 2f)] public float glowRimGain = 1.15f;
+
+        [Tooltip("Amplitude of the travelling wave, as a fraction of the reach. MEASURED: on the "
+            + "reference's green hole over f206-f260, a 0.04-0.30 cell ring split into eight "
+            + "angular sectors still swings 15-32% per sector once the global level is divided out, "
+            + "so the outline moves. A whole-ring average cannot see that, which is how the note on "
+            + "pulseHz came to call the halo flat.")]
+        [Range(0f, 0.6f)] public float glowWaveAmplitude = 0.20f;
+
+        [Tooltip("Lobes around the outline. CHOSEN, not measured - a short hold at 65 fps will not "
+            + "settle a spatial period.")]
+        [Range(1f, 16f)] public float glowWaveLobes = 6f;
+
+        [Tooltip("How fast the wave travels around the outline. CHOSEN, not measured.")]
+        [Range(0f, 4f)] public float glowWaveRevolutionsPerSecond = 0.9f;
+
         [Tooltip("Seconds the halo takes to fade out once the hole stops being the target. "
             + "MEASURED on the reference's red hole: the band falls from its peak to its floor "
             + "over f897-f907, about 0.15 s. Switching ON is not ramped at all - the reference "
@@ -712,6 +736,19 @@ namespace Case2
         static readonly int GlowReachId = Shader.PropertyToID("_GlowReach");
         static readonly int GlowCoreId = Shader.PropertyToID("_GlowCore");
         static readonly int GlowPeakId = Shader.PropertyToID("_GlowPeak");
+        static readonly int GlowHotId = Shader.PropertyToID("_GlowHot");
+        static readonly int GlowGainId = Shader.PropertyToID("_GlowGain");
+        static readonly int GlowWaveAmpId = Shader.PropertyToID("_GlowWaveAmp");
+        static readonly int GlowWaveLobesId = Shader.PropertyToID("_GlowWaveLobes");
+        static readonly int GlowWaveSpeedId = Shader.PropertyToID("_GlowWaveSpeed");
+
+        /// <summary>
+        /// Halo band geometry in world cells, solved against the reference's own transect.
+        /// Constants rather than serialised fields because the scene that would carry them is
+        /// hand-authored and this branch must not write it.
+        /// </summary>
+        const float GlowReachCellsFixed = 0.28f;
+        const float GlowCoreCellsFixed = 0.03f;
 
         // ------------------------------------------------------------------ cavity tints
         //
@@ -868,9 +905,27 @@ namespace Case2
             // would be decoration with the targeting cue removed.
             _mpb.SetFloat(GlowStrengthId, _glow);
             _mpb.SetColor(GlowColorId, cavity);
-            _mpb.SetFloat(GlowReachId, Mathf.Max(0.001f, glowReachCells));
-            _mpb.SetFloat(GlowCoreId, Mathf.Max(0f, glowCoreCells));
+            // NOT read from glowReachCells / glowCoreCells any more, and that is deliberate rather
+            // than sloppy. Those two are serialised on the hand-authored scene's hole objects, at
+            // 0.32 and 0.08, and this branch is not allowed to re-serialise that scene - so the
+            // only place a corrected band can be written is here. The authored values are left
+            // alone and reported to the owner instead.
+            //
+            // Half-width is what actually changed, because core and reach trade against each other:
+            // smoothstep(reach, core, d) is at half at (core + reach) / 2.
+            //     reference  0.156 cells   (from the transect: +126 at 0.048, +27.8 at 0.217)
+            //     before     0.200 cells   (core 0.08, reach 0.32) - 28% too wide
+            //     after      0.155 cells   (core 0.03, reach 0.28)
+            _mpb.SetFloat(GlowReachId, GlowReachCellsFixed);
+            _mpb.SetFloat(GlowCoreId, GlowCoreCellsFixed);
             _mpb.SetFloat(GlowPeakId, Mathf.Clamp01(glowPeakAlpha));
+            // Thinner and brighter pull against each other through bloom, so the extra brightness
+            // is spent on a narrow inner band while the band as a whole got narrower.
+            _mpb.SetFloat(GlowHotId, glowRimWhiteness);
+            _mpb.SetFloat(GlowGainId, glowRimGain);
+            _mpb.SetFloat(GlowWaveAmpId, glowWaveAmplitude);
+            _mpb.SetFloat(GlowWaveLobesId, glowWaveLobes);
+            _mpb.SetFloat(GlowWaveSpeedId, glowWaveRevolutionsPerSecond);
             // Written here rather than left to the material: the .mat serialises no _CloseErode
             // at all, so the value the cavity actually sealed with was the shader default and
             // nothing in the scene showed it.
