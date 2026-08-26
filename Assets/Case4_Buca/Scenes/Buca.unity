@@ -2447,7 +2447,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0.12, z: 0}
-  m_LocalScale: {x: 1.1928935, y: 0.30349612, z: 1.1928935}
+  m_LocalScale: {x: 1.2075078, y: 0.47645646, z: 1.2075078}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 736494267}
@@ -3616,11 +3616,12 @@ MonoBehaviour:
   trailScale: 0.75
   trailLifetime: 0.27
   streakLengthInDiameters: 2.1
-  streakWidthInDiameters: 0.68
+  streakWidthInDiameters: 0.629
   dropletSpanInDiameters: {x: 2, y: 4.45}
-  dropletSizeInDiameters: {x: 0.037, y: 0.171}
-  dropletCount: 11
-  dropletScatterInDiameters: 0.55
+  screenToWorldAlongFlight: 2.7
+  dropletSizeInDiameters: {x: 0.02, y: 0.094}
+  dropletCount: 16
+  dropletScatterInDiameters: 0.9
   puckDrawnDiameter: 1.306
   stretchAmount: 0.055
   bounceSquash: -0.055

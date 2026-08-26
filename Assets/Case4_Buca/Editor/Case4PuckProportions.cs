@@ -28,21 +28,39 @@
 /// it has any thickness at all, so forcing W:H = 1.353 on screen leaves 2 px of rim and turns the
 /// puck into a decal - thinner than the object the reference is actually showing.
 ///
-/// So the target is the reference OBJECT's proportion, not its screen number. Its side rim measures
-/// 8 px against a 92 px width at a 0.7766 vertical projection, giving thickness:diameter = 0.112.
-/// Ours is 0.418 / 0.950 = 0.440. Rendered by our camera that predicts 92 x 73 px, W:H = 1.26 -
-/// which does not reach 1.353 and is not meant to; the residual is the camera pitch difference and
-/// is recorded here rather than fitted away.
+/// A first pass therefore targeted the reference OBJECT's proportion instead: its side rim measures
+/// 8 px against a 92 px width at a 0.7766 vertical projection, giving thickness:diameter = 0.112,
+/// against our 0.418 / 0.950 = 0.440. The projector predicted that would render 92 x 73 px, W:H
+/// 1.26 - short of 1.353, and the shortfall was going to be reported as the camera difference.
+///
+/// THE CAPTURE SAID OTHERWISE, and the capture wins. Shipped at T/D = 0.112 and filmed by
+/// BatchCaptureRunner.CaptureDenseCase4, the puck measured 91 x 63 px, W:H = 1.444 - FLATTER than
+/// the reference, not rounder. The projector models the drawn body as a cylinder; the disc mesh is
+/// a rounded torus that tucks its rim under itself at this angle, so it renders shorter than its
+/// own bounding box and there was budget the model said did not exist.
+///
+/// So the thickness is solved from two LIVE captures instead of from the model. Writing
+/// H = a*D + b*T and substituting the two frames that exist -
+///     before  D = 0.950, T = 0.4182  ->  H = 62 px
+///     first   D = 1.306, T = 0.1463  ->  H = 63 px
+/// - gives a = 42.43, b = 51.87 px per world unit, which reproduces both to within 0.1 px. The
+/// width scale is k = W/D = 69.5 px/unit on the first frame and 69.7 on the second. Solving those
+/// for the reference's own 92 x 68 px gives D = 1.322 and T = 0.2296, i.e. T/D = 0.1737 - still
+/// 2.5x flatter than what the disc mesh carried, and now landing on the reference's screen ratio
+/// rather than near it.
 /// </summary>
 public static class Case4PuckProportions
 {
     public const string ScenePath = "Assets/Case4_Buca/Scenes/Buca.unity";
 
-    /// <summary>Drawn world diameter. 0.950 today; 0.950 * 1.375 from the lane-relative reading.</summary>
-    public const float TargetDrawnDiameter = 1.306f;
+    /// <summary>Drawn world diameter: 92 px of reference width at the k = 69.6 px/unit measured
+    /// across two captures.</summary>
+    public const float TargetDrawnDiameter = 1.322f;
 
-    /// <summary>Thickness:diameter of the reference disc, from its 8 px rim over a 92 px width.</summary>
-    public const float TargetThicknessRatio = 0.112f;
+    /// <summary>Thickness:diameter. Solved from two live captures for a 68 px drawn height at this
+    /// diameter, NOT from the reference disc's own 0.112 - see the class comment for why the
+    /// object-proportion target undershot by 7% on screen and what replaced it.</summary>
+    public const float TargetThicknessRatio = 0.1737f;
 
     public static float TargetDrawnThickness { get { return TargetDrawnDiameter * TargetThicknessRatio; } }
 
@@ -84,6 +102,23 @@ public static class Case4PuckProportions
             before.ToString("F3"), after.ToString("F3"),
             TargetDrawnDiameter, TargetDrawnThickness, TargetThicknessRatio,
             body.localScale.ToString("F5"));
+    }
+
+    /// <summary>
+    /// One batchmode call: write the proportions into the scene, run the gate in both directions,
+    /// then film the case. Three separate Unity launches took three domain reloads and three waits
+    /// on the repo's mkdir lock, and the gate's verdict and the frames it is a verdict about have
+    /// to come from the SAME build to be worth anything.
+    ///
+    /// No EditorApplication.Exit and no -quit: FrameStripCapture drives EditorApplication.update,
+    /// and quitting out from under it returns rc=0 having filmed nothing, which reads as a pass.
+    /// </summary>
+    public static void ApplyGateAndCaptureCase4()
+    {
+        UnityEngine.Debug.Log(ApplyToScene());
+        UnityEngine.Debug.Log(Case4PuckProportionsGate.RunBoth());
+        FrameStripCapture.SetFrameCount(340);
+        FrameStripCapture.Capture("Buca");
     }
 
     /// <summary>

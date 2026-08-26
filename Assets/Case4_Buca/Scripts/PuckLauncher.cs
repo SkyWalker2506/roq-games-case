@@ -72,6 +72,10 @@ namespace Case4
                  "anything - see PuckLauncher.HoldForScriptedShot.")]
         public float idleLift = 0f;
         public float trailEmissionRate = 30f;
+        [Tooltip("LEGACY. It used to scale the trail objects' transforms and, through them, the " +
+                 "particle sizes. It no longer feeds any size: the trail is measured in puck " +
+                 "diameters now, which is the quantity this field was standing in for. Left in " +
+                 "place because the scene serialises it; nothing reads it.")]
         public float trailScale = 0.65f;
         public float trailLifetime = 0.27f;
 
@@ -101,24 +105,52 @@ namespace Case4
         // in world simulation space is (speed x lifetime) long: a length in puck-diameters is the
         // thing the reference actually holds constant, seconds are not.
         [Header("Trail shaped against the reference (see the block above this in source)")]
-        [Tooltip("Puck diameters behind the puck that the warm streak covers. MEASURED 2.1 d for " +
-                 "the faint tail; the strongly-warm core is 0.80 d and falls out of the size and " +
-                 "alpha ramps rather than being a second number.")]
+        [Tooltip("Puck diameters behind the puck that the warm streak covers, ON SCREEN. MEASURED " +
+                 "2.1 d for the faint tail; the strongly-warm core is 0.80 d and falls out of the " +
+                 "size and alpha ramps rather than being a second number.")]
         public float streakLengthInDiameters = 2.1f;
-        [Tooltip("Streak width at the puck as a fraction of the puck diameter. MEASURED 0.68.")]
-        public float streakWidthInDiameters = 0.68f;
-        [Tooltip("Nearest and furthest droplet, in puck diameters behind the puck. MEASURED 2.0 " +
-                 "and 4.45.")]
+        [Tooltip("Authored quad width of one streak puff, as a fraction of the puck diameter. The " +
+                 "reference streak MEASURES 1.07 d wide as a component (0.68 d if only its clearly " +
+                 "warm core is counted). This is neither of those: it is what has to be AUTHORED " +
+                 "for 1.07 d to come back out of a capture, and additive blending plus bloom widen " +
+                 "a puff well past its quad. Measured: 0.994 authored rendered 1.69 d, so " +
+                 "0.994 * 1.07 / 1.69 = 0.629.")]
+        public float streakWidthInDiameters = 0.629f;
+        [Tooltip("Nearest and furthest droplet, in puck diameters behind the puck, ON SCREEN. " +
+                 "MEASURED 2.0 and 4.45.")]
         public Vector2 dropletSpanInDiameters = new Vector2(2.0f, 4.45f);
-        [Tooltip("Droplet diameter range as a fraction of the puck diameter. MEASURED 0.037..0.171 " +
-                 "-- what matters is that the RANGE is ~4.7x, not one repeated size.")]
-        public Vector2 dropletSizeInDiameters = new Vector2(0.037f, 0.171f);
-        [Tooltip("Droplets alive at once. MEASURED 9..13 warm components in the reference frame.")]
-        public int dropletCount = 11;
-        [Tooltip("Sideways wander of a droplet off the flight line, in puck diameters. The reference " +
-                 "reaches 1.46 d on its widest straggler; CHOSEN lower - see the report - because " +
-                 "throwing ours that wide at this launch speed puts droplets through the rail.")]
-        public float dropletScatterInDiameters = 0.55f;
+
+        [Tooltip("Screen puck-diameters -> world puck-diameters, along the shot. The reference " +
+                 "numbers above were read off a frame, so they are SCREEN lengths, and the shot " +
+                 "runs away from the camera: a world length along it is foreshortened before it " +
+                 "reaches the frame. MEASURED once, from our own scene rather than assumed - the " +
+                 "trail simulated at the solved launch speed put its furthest droplet 4.45 world " +
+                 "diameters out and 2.26 screen diameters out, giving 1.97. Shipping 1.97 and " +
+                 "measuring the CAPTURE back put the furthest countable droplet at 3.1 screen " +
+                 "diameters against the reference's 4.45, so the constant was re-measured off live " +
+                 "frames rather than the edit-mode simulation: 1.97 * 4.45 / 3.1 = 2.83, taken as " +
+                 "2.7. It is a single constant for a single shot direction, NOT a per-frame solve, " +
+                 "and the trail runs short on a ricochet that turns the puck across the camera.")]
+        public float screenToWorldAlongFlight = 2.7f;
+        [Tooltip("Authored quad diameters of a droplet, as a fraction of the puck diameter. The " +
+                 "reference droplets MEASURE 0.030..0.165 d. Authored at those numbers ours came " +
+                 "back at 0.065..0.347 - the same additive-plus-bloom widening the streak shows - " +
+                 "so these are scaled by 0.55 to land on the reference's measured range. What has " +
+                 "to survive the scaling is the RANGE: ~4.7x, not one repeated size.")]
+        public Vector2 dropletSizeInDiameters = new Vector2(0.020f, 0.094f);
+        [Tooltip("Droplets alive at once. MEASURED 9..13 warm components in the reference frame. " +
+                 "Set ABOVE that: at 11 our own capture only separated 4..8 above the same warmth " +
+                 "threshold, because the faintest of ours fall under it - the number that matters " +
+                 "is how many can be COUNTED off a frame, and that is what was measured on the " +
+                 "reference.")]
+        public int dropletCount = 16;
+        [Tooltip("Sideways wander of a droplet off the flight line, in puck diameters. The " +
+                 "reference reaches 1.46 d on its widest straggler. CHOSEN, not measured into: this " +
+                 "is a cap on a radial speed and only the widest droplet ever gets near it, so the " +
+                 "number here is not the number that will be measured back off a frame. Held below " +
+                 "the reference's widest because the arena is 6 world units across the right lane " +
+                 "and droplets thrown a full puck diameter and a half sideways cross the rail.")]
+        public float dropletScatterInDiameters = 0.9f;
         [Tooltip("World diameter of the drawn puck. Used only to convert the trail's " +
                  "puck-diameter units into world units; read off the renderer at Awake when it can " +
                  "be, this is the fallback.")]
@@ -577,14 +609,19 @@ namespace Case4
                 // droplet the reference draws is 4.45 puck diameters back, so that is the longest
                 // life; the shortest is set so droplets keep arriving over the whole span rather
                 // than all expiring together.
-                float farLife = dropletSpanInDiameters.y * d / speed;
-                float nearLife = Mathf.Max(0.02f, dropletSpanInDiameters.x * d / speed);
+                float k = Mathf.Max(0.1f, screenToWorldAlongFlight);
+                float farLife = dropletSpanInDiameters.y * k * d / speed;
+                float nearLife = Mathf.Max(0.02f, dropletSpanInDiameters.x * k * d / speed);
                 main.startLifetime = new ParticleSystem.MinMaxCurve(nearLife, farLife);
 
                 // The 4.7x size spread is the point. One size is what a repeated sprite looks like.
+                // NOT multiplied by trailScale. Every size here is already stated as a fraction of
+                // the puck's own diameter, which is what trailScale used to stand in for; leaving
+                // both in place meant the measured 0.037..0.171 d rendered at 0.75 of itself and
+                // the numbers in the comment stopped describing the pixels.
                 main.startSize = new ParticleSystem.MinMaxCurve(
-                    dropletSizeInDiameters.x * d * trailScale,
-                    dropletSizeInDiameters.y * d * trailScale);
+                    dropletSizeInDiameters.x * d,
+                    dropletSizeInDiameters.y * d);
                 main.startColor = new Color(1f, 0.90f, 0.55f, 1f);
                 main.startSpeed = new ParticleSystem.MinMaxCurve(0.3f, dropletScatterInDiameters * d / Mathf.Max(0.01f, farLife));
                 main.gravityModifier = 0f;
@@ -637,8 +674,16 @@ namespace Case4
 
                 if (_glowTrail != null)
                 {
-                    float streakWidth = Mathf.Max(0.02f, streakWidthInDiameters * d * trailScale);
-                    float streakLife = Mathf.Max(0.02f, streakLengthInDiameters * d / speed);
+                    // Authored quad width. It is NOT the width that comes back off a frame, and
+                    // the correction goes the opposite way to the obvious one: fx_softcircle's own
+                    // alpha*luminance is above a tenth of its peak across only 0.684 of its 256 px,
+                    // which argued for a 1.46x WIDER quad - but the material is additive and the
+                    // pipeline blooms it, so a quad authored at 0.994 d measured back at 1.69 d
+                    // against the reference streak's 1.07 d. The field below is therefore calibrated
+                    // against the CAPTURE, not against the texture, and no divisor is applied here.
+                    float streakWidth = Mathf.Max(0.02f, streakWidthInDiameters * d);
+                    float streakLife = Mathf.Max(0.02f,
+                        streakLengthInDiameters * Mathf.Max(0.1f, screenToWorldAlongFlight) * d / speed);
 
                     ParticleSystem.MainModule glowMain = _glowTrail.main;
                     glowMain.simulationSpace = ParticleSystemSimulationSpace.World;
@@ -719,8 +764,8 @@ namespace Case4
                 new GradientColorKey[]
                 {
                     new GradientColorKey(new Color(0.992f, 0.980f, 0.678f), 0.00f),
-                    new GradientColorKey(new Color(0.980f, 0.776f, 0.635f), 0.28f),
-                    new GradientColorKey(new Color(0.953f, 0.706f, 0.600f), 0.55f),
+                    new GradientColorKey(new Color(0.980f, 0.776f, 0.635f), 0.12f),
+                    new GradientColorKey(new Color(0.953f, 0.706f, 0.600f), 0.40f),
                     new GradientColorKey(new Color(0.737f, 0.588f, 0.569f), 1.00f),
                 },
                 new GradientAlphaKey[]
@@ -745,14 +790,16 @@ namespace Case4
                 new GradientColorKey[]
                 {
                     new GradientColorKey(new Color(0.988f, 0.686f, 0.373f), 0.00f),
-                    new GradientColorKey(new Color(0.753f, 0.725f, 0.569f), 0.45f),
+                    new GradientColorKey(new Color(0.965f, 0.784f, 0.451f), 0.35f),
+                    new GradientColorKey(new Color(0.753f, 0.725f, 0.569f), 0.70f),
                     new GradientColorKey(new Color(0.616f, 0.608f, 0.553f), 1.00f),
                 },
                 new GradientAlphaKey[]
                 {
                     new GradientAlphaKey(0.00f, 0.00f),   // born inside the streak, invisible there
-                    new GradientAlphaKey(1.00f, 0.18f),
-                    new GradientAlphaKey(0.70f, 0.60f),
+                    new GradientAlphaKey(1.00f, 0.15f),
+                    new GradientAlphaKey(0.95f, 0.55f),
+                    new GradientAlphaKey(0.55f, 0.80f),
                     new GradientAlphaKey(0.00f, 1.00f),
                 });
             return g;
