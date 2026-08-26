@@ -30,8 +30,23 @@ namespace Case3
         [Serializable]
         public sealed class Entry
         {
-            /// <summary>Name suffix shared by the sticker and its ghost slot ("Hayvan").</summary>
+            /// <summary>
+            /// The STACK key: which reward card this item is collected onto ("Cat", "Noodle",
+            /// "Sweets"). Several page items share one key on purpose - that is the stack.
+            /// </summary>
             public string key;
+            /// <summary>
+            /// What this individual item is called. The reference names the CARD, not the item, so
+            /// this is what gets logged on pick and what the card tab reads for the first item of a
+            /// stack; a cup of ramen and a tin of ramen are both collected onto the "Noodle" card.
+            /// </summary>
+            public string displayName;
+            /// <summary>
+            /// Material this item wears while it is UNCOVERED. Page items are authored wearing the dim
+            /// material, so there is no earlier value to restore and it has to be named here; without
+            /// it an uncovered page item would be handed a null material and disappear.
+            /// </summary>
+            public Material litMaterial;
             /// <summary>Peel driver, which lives on the sticker object itself.</summary>
             public StickerPeel peel;
             /// <summary>The sticker sprite renderer.</summary>
@@ -61,10 +76,39 @@ namespace Case3
         [Header("VFX prefabs")]
         public GameObject attachBurstPrefab;
 
+        [Header("Stacking (reward cards)")]
+        [Tooltip("How many of a kind a card asks for. The reference draws 1/5 on BOTH filled cards - " +
+                 "on the Cat card and on the Noodle card - while the page carries a different number " +
+                 "of cats than of noodles, and it separately draws 1/2 for the page. So 5 is a fixed " +
+                 "per-card requirement collected across the level, not a count of what is on this page.")]
+        public int stackRequirement = 5;
+
+        [Tooltip("One per reward card. The counter label is the card's own '1/5'; it is drawn INTO the " +
+                 "card's bottom-right corner, in world space with the card, not as screen HUD.")]
+        public StackCard[] stacks = new StackCard[0];
+
+        /// <summary>A reward card and the running count of the kind collected onto it.</summary>
+        [Serializable]
+        public sealed class StackCard
+        {
+            /// <summary>Matches <see cref="Entry.key"/>.</summary>
+            public string key;
+            /// <summary>The filled card art; the same renderer every Entry with this key points at.</summary>
+            public SpriteRenderer card;
+            /// <summary>World-space "n/5" drawn in the card's bottom-right corner.</summary>
+            public TMPro.TextMeshPro counter;
+            [NonSerialized] public int Collected;
+        }
+
         [Header("Covered-item state")]
         [Tooltip("Material a COVERED sticker wears. Wired by Case3SceneSetup.Build from " +
                  "Materials/Case3_PageObjectDim.mat - the same one the page's dim items use.")]
         public Material dimMaterial;
+
+        [Tooltip("Sorting order a collected item is lifted to for the whole run. A page item is " +
+                 "authored in the 100s, under the reward cards at 200; without this it would fly to " +
+                 "its card and land BEHIND it.")]
+        public int flightSortingOrder = 590;
 
         [Header("Timing, seconds (from .plan-build/timing.md)")]
         [Tooltip("Pre-tap idle duration matching reference video (t=0.00 to 0.75s).")]
@@ -107,6 +151,15 @@ namespace Case3
 
         /// <summary>Scaled time follows Time.captureFramerate during deterministic capture.</summary>
         protected override float SequenceClock { get { return Time.time; } }
+
+        /// <summary>What this item is called on screen; falls back to its object name.</summary>
+        public string NameOf(int index)
+        {
+            if (index < 0 || index >= Count || entries[index] == null) return "?";
+            Entry e = entries[index];
+            if (!string.IsNullOrEmpty(e.displayName)) return e.displayName;
+            return e.sticker != null ? e.sticker.name : e.key;
+        }
 
         /// <summary>Number of registered stickers.</summary>
         public int Count { get { return entries != null ? entries.Length : 0; } }
@@ -296,8 +349,9 @@ namespace Case3
                 Entry e = entries[i];
                 if (e == null || e.sticker == null) continue;
 
-                if (_litMaterial[i] == null && e.sticker.sharedMaterial != dimMaterial)
-                    _litMaterial[i] = e.sticker.sharedMaterial;
+                if (_litMaterial[i] == null)
+                    _litMaterial[i] = e.litMaterial != null ? e.litMaterial
+                                    : (e.sticker.sharedMaterial != dimMaterial ? e.sticker.sharedMaterial : null);
 
                 if (_covered[i])
                 {
@@ -316,8 +370,77 @@ namespace Case3
                 }
                 else if (e.sticker.sharedMaterial == dimMaterial)
                 {
+                    if (_litMaterial[i] == null)
+                    {
+                        // Never hand a renderer a null material to "fix" a lit state - it would draw
+                        // magenta and the page would be worse than the bug. Say so instead.
+                        if (!_dimWarned)
+                        {
+                            _dimWarned = true;
+                            Debug.LogError("[Case3] " + e.sticker.name + " is uncovered and must read lit, but no " +
+                                           "litMaterial is wired for it. Run Case3SceneSetup.Build.");
+                        }
+                        continue;
+                    }
                     e.sticker.sharedMaterial = _litMaterial[i];
                 }
+            }
+        }
+
+        // ------------------------------------------------------------------ stacking
+
+        /// <summary>The card for a key, or null.</summary>
+        public StackCard StackOf(string key)
+        {
+            if (stacks == null || string.IsNullOrEmpty(key)) return null;
+            for (int i = 0; i < stacks.Length; i++)
+                if (stacks[i] != null && stacks[i].key == key) return stacks[i];
+            return null;
+        }
+
+        /// <summary>How many of a kind have been collected onto its card so far.</summary>
+        public int StackCount(string key)
+        {
+            StackCard c = StackOf(key);
+            return c != null ? c.Collected : 0;
+        }
+
+        /// <summary>
+        /// Adds one to a card's stack and rewrites its counter.
+        ///
+        /// The counter is the whole point of a stack: collecting a SECOND ramen does not open a second
+        /// card, it lands on the Noodle card and turns 1/5 into 2/5. Called once, at attach.
+        /// </summary>
+        void PushStack(string key)
+        {
+            StackCard c = StackOf(key);
+            if (c == null)
+            {
+                Debug.LogError("[Case3] no reward card is wired for key '" + key + "'; the collected item " +
+                               "has nowhere to stack. Run Case3SceneSetup.Build.");
+                return;
+            }
+            c.Collected++;
+            RefreshStackLabel(c);
+        }
+
+        /// <summary>Writes "n/5" onto a card, and hides the label until the card holds something.</summary>
+        void RefreshStackLabel(StackCard c)
+        {
+            if (c == null || c.counter == null) return;
+            c.counter.text = c.Collected + "/" + Mathf.Max(1, stackRequirement);
+            c.counter.enabled = c.Collected > 0;
+        }
+
+        /// <summary>Empties every card. Only the replay path uses it.</summary>
+        void ResetStacks()
+        {
+            if (stacks == null) return;
+            for (int i = 0; i < stacks.Length; i++)
+            {
+                if (stacks[i] == null) continue;
+                stacks[i].Collected = 0;
+                RefreshStackLabel(stacks[i]);
             }
         }
 
@@ -513,8 +636,9 @@ namespace Case3
 
             _current = index;
             _stickerTf = entries[index].sticker.transform;
-            Debug.Log("[Case3] SELECTED sticker=" + entries[index].sticker.name +
-                      " -> slot=" + entries[index].targetSlot.name);
+            Debug.Log("[Case3] SELECTED " + NameOf(index) + " (" + entries[index].sticker.name + ")" +
+                      " -> card=" + entries[index].key + " " + (StackCount(entries[index].key) + 1) +
+                      "/" + stackRequirement);
             _pressDriven = true;
             Play();
 
@@ -620,10 +744,13 @@ namespace Case3
             }
 
             CaptureHome();
+            // Lift the whole piece of paper over the cards BEFORE Prepare, because the curl mesh
+            // takes its own sorting order from the sprite's at that moment.
+            cur.sticker.sortingOrder = Mathf.Max(cur.HomeSortingOrder, flightSortingOrder);
             peel.Prepare();
 
-            Debug.Log(string.Format("[Case3] RUN_BEGIN sticker={0} -> slot={1} (key {2})",
-                cur.sticker.name, targetSlot.name, cur.key));
+            Debug.Log(string.Format("[Case3] RUN_BEGIN item={0} ({1}) -> card={2} slot={3}",
+                NameOf(_current), cur.sticker.name, cur.key, targetSlot.name));
 
             _t0 = SequenceClock;
             _startFrame = Time.frameCount;
@@ -784,12 +911,21 @@ namespace Case3
                 RestartSeededParticles(burst, (uint)(0xC3A770u + _current * 101));
             }
 
-            // The reference-filled card crop contains the attached art, green label and 1/5 counter.
+            // The reference-filled card crop contains the attached art and its green name tab.
             // Cross-fade to those exact pixels at arrival instead of rebuilding them with substitute UI.
+            //
+            // STACKING. The card is shared by every item of its kind. The FIRST ramen fades the card
+            // in from nothing; the second must not blink the card out and fade it back in, because in
+            // the reference the card stays put and only its counter moves. So the fade starts from
+            // where the card already is, and the counter is pushed here, before the pop, so the number
+            // the card pops with is the new one.
+            bool firstOfKind = StackCount(cur.key) == 0;
+            PushStack(cur.key);
             if (cur.reward != null)
             {
                 cur.sticker.enabled = false;
-                SetRewardAlpha(cur, 0f);
+                if (cur.peel != null) cur.peel.SetCompanionsEnabled(false);
+                if (firstOfKind) SetRewardAlpha(cur, 0f);
             }
 
             AudioService.PlayLayered(SfxId.AttachPop, SfxId.RippleTick, 0.055f);
@@ -807,7 +943,7 @@ namespace Case3
                 float w = Mathf.Sin(Mathf.PI * Mathf.Pow(k, 0.6f));
                 if (cur.reward != null)
                 {
-                    SetRewardAlpha(cur, Ease.Evaluate(EaseType.OutCubic, k));
+                    SetRewardAlpha(cur, firstOfKind ? Ease.Evaluate(EaseType.OutCubic, k) : 1f);
                     cur.reward.transform.localScale = Vector3.Scale(cur.RewardHomeScale,
                         new Vector3(1f + popStretch * w, 1f - popStretch * 0.55f * w, 1f));
                 }
@@ -848,8 +984,8 @@ namespace Case3
                 attachTime - tapDuration, SequenceTime, Time.frameCount - _startFrame,
                 (Time.frameCount - _startFrame) / Mathf.Max(0.001f, SequenceTime),
                 flight != null ? flight.EmittedCount : 0));
-            Debug.Log(string.Format("[Case3] RUN_END sticker={0} landed on {1}; {2} sticker(s) still tappable",
-                cur.sticker.name, targetSlot.name, PlayableCount()));
+            Debug.Log(string.Format("[Case3] RUN_END {0} landed on the {1} card at {2}/{3}; {4} item(s) still tappable",
+                NameOf(_current), cur.key, StackCount(cur.key), stackRequirement, PlayableCount()));
         }
 
         int PlayableCount()
@@ -885,6 +1021,7 @@ namespace Case3
                     Squash.Cancel(e.peel.transform);
                     e.peel.ResetInstant();
                 }
+                if (e.peel != null) e.peel.SetCompanionsEnabled(true);
                 if (e.sticker != null)
                 {
                     e.sticker.enabled = true;
@@ -905,6 +1042,7 @@ namespace Case3
 
             _current = -1;
             _stickerTf = null;
+            ResetStacks();
 
             // Back to the page's opening state, dim items included. Without this a replay would
             // start with whatever was promoted during the previous run still lit.
@@ -919,13 +1057,24 @@ namespace Case3
             Tweener.CancelAll();
         }
 
-        static void SetRewardAlpha(Entry e, float alpha)
+        void SetRewardAlpha(Entry e, float alpha)
         {
             if (e == null || e.reward == null) return;
             Color c = e.RewardHomeColor;
             c.a = Mathf.Clamp01(alpha);
             e.reward.color = c;
             e.reward.enabled = c.a > 0.001f;
+
+            // The counter is a separate renderer sitting on the card, so it has to be faded by the
+            // same hand or it would snap on ahead of the card it belongs to.
+            StackCard sc = StackOf(e.key);
+            if (sc != null && sc.counter != null)
+            {
+                Color t = sc.counter.color;
+                t.a = c.a;
+                sc.counter.color = t;
+                sc.counter.enabled = sc.Collected > 0 && c.a > 0.001f;
+            }
         }
 
         /// <summary>The yellow-lime the reference's landing burst measures at; same value as StickerFlight.sparkleColor.</summary>

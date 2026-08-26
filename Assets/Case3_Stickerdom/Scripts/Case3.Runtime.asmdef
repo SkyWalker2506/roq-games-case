@@ -4,7 +4,8 @@
     "references": [
         "Shared.Runtime",
         "Shared.Audio",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
