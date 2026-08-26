@@ -363,19 +363,26 @@ namespace Case2
         [Header("Tile rise (measured, see the block comment above)")]
         [Tooltip("Peak height a fed cell's tile pops to, world units. Measured 1.79/2.11/2.30/2.30 "
             + "across four cells; 2.1 u is 45 screen px at 122.55*cos(80) = 21.28 px per world unit.")]
-        public float tileRiseHeight = 2.1f;
+        /// <summary>Peak the tile overshoots to above flush. 2, the owner's number.</summary>
+        [System.NonSerialized] public float tileRiseHeight = 2f;
 
         [Tooltip("How far BELOW the board plane a fed cell's tile starts, world units. The tile does "
             + "not begin flush: it waits down inside the pit and climbs out. Measured -5.08 u on cell "
             + "(2,2) held across frames 61-63 and -5.17 u on cell (1,1) at frames 65-66.")]
-        public float tileRiseDepth = 5.1f;
+        /// <summary>
+        /// How far BELOW the board plane a fed cell's tile starts. 2, the owner's number: "2 metre
+        /// asagidan gelsin". The measured 5.1 was correct for a rise nobody could see - the renderer
+        /// was switched off for the whole climb - so the depth only had to hide the tile, not read.
+        /// Now the climb is the shot, and 5 units of it at this camera is a long trip from nowhere.
+        /// </summary>
+        [System.NonSerialized] public float tileRiseDepth = 2f;
 
         [Tooltip("Seconds for the whole arc: up from tileRiseDepth to flush, past it by "
             + "tileRiseHeight, and back. Measured 200-230 ms on cell (2,2) (f63 deep -> f70 flush).")]
         // NonSerialized: every hole in the scene carries its own 0.21, which would override this.
         // Owner-directed deviation from the measured 200-230 ms - at the reference's speed the tiles
         // read as a flicker rather than as blocks arriving, so the arc is roughly doubled.
-        [System.NonSerialized] public float tileRiseDuration = 0.45f;
+        [System.NonSerialized] public float tileRiseDuration = 2f;
 
         [Tooltip("Fraction of the arc spent climbing to flush. Measured: cell (2,2) crossed the board "
             + "plane at f66 of a f63-f70 motion, so about half.")]
@@ -383,7 +390,9 @@ namespace Case2
 
         [Tooltip("Seconds the per-cell start times are spread over. Measured: peaks spanned frames "
             + "66-74 at 30 fps, i.e. 267 ms.")]
-        public float tileRiseStagger = 0.27f;
+        /// <summary>Seconds the per-cell start times are spread over. 0.8: the arcs are 2 s now,
+        /// and a 0.27 spread across a 2 s move is not a stagger, it is a rounding error.</summary>
+        [System.NonSerialized] public float tileRiseStagger = 0.8f;
 
         Transform[] _cellTiles;
         Vector3[] _cellTileHome;
@@ -576,31 +585,6 @@ namespace Case2
             if (r != null && r.enabled != visible) r.enabled = visible;
         }
 
-        static readonly int ClipMinYId = Shader.PropertyToID("_ClipMinY");
-        MaterialPropertyBlock _tileMpb;
-
-        /// <summary>
-        /// Lifts or restores the tray-floor clip on ONE cell tile.
-        ///
-        /// The clip exists so a resting tile does not hang under a board whose border is 0.08 units
-        /// tall. A RISING tile is a different case: it is climbing out of an opening the player is
-        /// looking into, so the part below the floor is exactly what should be seen. Clipping it
-        /// there is what made the climb invisible and left the tile appearing at the plane already
-        /// arrived - "hic hareket etmiyor, direk geliyor".
-        ///
-        /// Per-renderer through a property block, so the shared board materials are untouched and
-        /// the other 50-odd tiles stay clipped while these few are in the air.
-        /// </summary>
-        void SetTileClipped(int i, bool clipped)
-        {
-            if (_cellTileRenderers == null || i >= _cellTileRenderers.Length) return;
-            Renderer r = _cellTileRenderers[i];
-            if (r == null) return;
-            if (_tileMpb == null) _tileMpb = new MaterialPropertyBlock();
-            r.GetPropertyBlock(_tileMpb);
-            _tileMpb.SetFloat(ClipMinYId, clipped ? -0.02f : -1000f);
-            r.SetPropertyBlock(_tileMpb);
-        }
 
         /// <summary>Half the widest side of this opening, world units. Read by the gate.</summary>
         public float OpeningHalfExtent
@@ -657,7 +641,21 @@ namespace Case2
         /// board is back" has to use this rather than the close, which is what kept releasing the
         /// hole's outline early.
         /// </summary>
-        public float RiseTotalSeconds { get { return tileRiseStagger + tileRiseDuration; } }
+        public float RiseTotalSeconds { get { return tileRiseStagger + tileRiseDuration * 1.2f; } }
+
+        /// <summary>
+        /// Deterministic 0..1 from an integer. Same cell, same value, every run - the variation has
+        /// to survive a replay or the frame strip stops being comparable between captures.
+        /// </summary>
+        static float Hash01(int n)
+        {
+            unchecked
+            {
+                uint h = (uint)n * 2654435761u;
+                h ^= h >> 15; h *= 0x2545F491u; h ^= h >> 13;
+                return (h & 0xFFFFFF) / 16777215f;
+            }
+        }
 
         public void RiseTiles()
         {
@@ -669,9 +667,14 @@ namespace Case2
             for (int i = 0; i < _cellTiles.Length; i++)
             {
                 if (_cellTiles[i] == null) continue;
-                float delay = _cellTiles.Length > 1
-                    ? tileRiseStagger * i / (_cellTiles.Length - 1)
-                    : 0f;
+                // Staggered by a HASH of the cell, not by its index.
+                //
+                // The linear i/(n-1) spread made the cells fire in board order and, with every arc
+                // the same length, they still landed in a tidy procession. The owner: "belli
+                // varyasyonlarla hareket ettir, hepsi ayni anda bitip baslamasin." Hashing the index
+                // scatters both the start and the arc length while staying deterministic, so a
+                // replay of the same hole plays the same way and the frame strip stays comparable.
+                float delay = tileRiseStagger * Hash01(i * 2 + 1);
                 _riseRoutines.Add(StartCoroutine(RiseOne(i, delay)));
             }
         }
@@ -721,13 +724,13 @@ namespace Case2
             // Waiting deep inside the pit, and VISIBLE down there: the opening is what the player is
             // looking into, so the tile should be seen sitting at the bottom of it and then climbing
             // the whole way out. The owner: "cok derinden 2 metre yukari gelip inmeli."
-            SetTileClipped(i, false);
             SetTileVisible(i, true);
             float end = Time.time + delay;
             while (Time.time < end) yield return null;
 
             float start = Time.time;
-            float dur = Mathf.Max(0.01f, tileRiseDuration);
+            // +/-20% on the arc length, so two tiles that start together do not finish together.
+            float dur = Mathf.Max(0.01f, tileRiseDuration * (0.8f + 0.4f * Hash01(i * 2)));
             while (true)
             {
                 float k = (Time.time - start) / dur;
@@ -738,7 +741,6 @@ namespace Case2
             }
             if (t != null) t.position = home;      // exact, not recomputed
             SetTileVisible(i, true);
-            SetTileClipped(i, true);               // home again: the body goes back under the floor
         }
 
         /// <summary>

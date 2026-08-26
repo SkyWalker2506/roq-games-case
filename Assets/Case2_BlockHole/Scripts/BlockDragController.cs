@@ -52,7 +52,21 @@ namespace Case2
         public float outlineWidth = 0.022f;
 
         [Tooltip("How close (XZ) the block centre must be to a hole to count as hovering it.")]
-        public float hoverRadius = 0.70f;
+        /// <summary>
+        /// How near the block's art centre has to be to a hole for a release to count.
+        ///
+        /// 1.6, up from 0.70. 0.70 is less than a cell, so a piece dropped visibly over its hole but
+        /// half a tile off simply did nothing - no snap and no miss feedback, which reads as the game
+        /// having stopped. The owner: "obje tam oturmadan calismadi, tam oturma kismina biraz
+        /// tolerans ver, yakina birakinca otursun."
+        ///
+        /// Cheap to be generous here: EvaluateHover already takes the NEAREST hole, and a release is
+        /// still rejected unless Matches(_shapeId), so a wider radius cannot deliver a piece into the
+        /// wrong opening - it only stops a correct drop from being thrown away for being 30 cm out.
+        ///
+        /// NonSerialized: three blocks in the scene carry hoverRadius: 0.7 and would outrank this.
+        /// </summary>
+        [System.NonSerialized] public float hoverRadius = 1.6f;
 
         [Tooltip("Let a real pointer drive the block when the director is idle.")]
         public bool allowUserInput = true;
