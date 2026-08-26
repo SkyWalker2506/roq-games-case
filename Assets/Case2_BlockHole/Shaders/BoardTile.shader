@@ -1,30 +1,56 @@
 // Per-tile bevelled board surface.
 //
-// The reference board is not a flat panel with lines drawn on it: each floor tile is an
-// individually bevelled slab. Measured across an empty tile in ref_0.00s.png, a cell reads
-// dark seam -> bright bevel band -> slight dip -> gentle rise across the face
-// (x3.00:64.9  x3.09:76.9  x3.17:62.2  x3.25..x3.92: 63.3 -> 75.0), and the same structure
-// appears vertically (j3.17:58.0 seam, j3.25:85.0 bevel). Our old output was flat fill plus a
-// hairline seam: the same transect read 60.3, 65.4, 70.8, 70.8 ... 69.6, a within-cell spread
-// under 1.5 code values.
+// MEASURED, not assumed. Positive control first: a horizontal transect of the reference
+// (_refs/Developer Case Referans/Block Hole.mp4 frame 300, y=900, sRGB luma) across one
+// cell boundary reads
+//     76 76 76 | 74 69 67 64 61 53 42 40 | 49 62 77 89 88 | 66 64 64 65 65 | 63 63 63 ...
+//     face A     shaded trailing edge      GROUT floor      LIT chamfer lip   face B
+// Cell pitch 108 px. Grout floor 40 = 0.53x the light face (76). The lit lip OVERSHOOTS the
+// face by +26 code values (89 vs 63), and it sits only on the LOW-x edge; the trailing
+// high-x edge falls to 52 (-17%) before the groove. Vertically the same shape appears with a
+// weaker lip (74 vs face 63, +11) on the tile's TOP edge and a -24% fall on its bottom edge.
+// The reference face itself is FLAT between the chamfers - all the modelling is in ~10% of
+// the cell at each edge, not in a broad ramp.
+//
+// The same transect on our own frame before this change read
+//     58 58 57 | 52 46 42 34 | 38 41 43 43 41 | 41 40 39 38 38 ... 45
+// i.e. a 2 px hairline groove and NO lip at all: the post-groove peak was 43 against a face
+// of 44, an overshoot of MINUS one code value. That is the whole reason the board read as a
+// painted checkerboard rather than as separate slabs. The tiles were never flat geometry -
+// each Tile_i_j is its own unit cube at scale (1, 0.064, 1) - so the fix is entirely in the
+// material, and the previous defaults (_BevelLift 0.03, _SeamDarkness 0.70) were simply an
+// order of magnitude too timid.
 Shader "Case2/BoardTile"
 {
     Properties
     {
-        [MainColor] _BaseColor("Base Tile Color", Color) = (0.175, 0.225, 0.420, 1)
+        [MainColor] _BaseColor("Base Tile Color", Color) = (0.280, 0.293, 0.408, 1)
         [MainTexture] _SheenMap("Sheen & Bevel Map (unused)", 2D) = "white" {}
-        _SheenStrength("Sheen Strength (unused)", Range(0, 1)) = 0.25
-        _BevelContrast("Bevel Contrast (legacy)", Range(0, 1)) = 0.22
-        _VerticalGrad("Vertical Gradient Strength", Range(0, 0.5)) = 0.08
+        _SheenStrength("Sheen Strength (unused)", Range(0, 1)) = 0.12
+        _BevelContrast("Bevel Contrast (legacy, unused)", Range(0, 1)) = 0.20
+        _VerticalGrad("Board Vertical Gradient", Range(0, 0.5)) = 0.05
 
-        _SeamWidth("Grout Seam Width (cell fraction)", Range(0.005, 0.12)) = 0.030
-        _BevelWidth("Bevel Band Width (cell fraction)", Range(0.02, 0.30)) = 0.070
-        _BevelLift("Bevel Highlight Lift", Range(0, 0.8)) = 0.03
-        _BevelShade("Bevel Inner Trough", Range(0, 0.5)) = 0.10
-        _TopShade("High-z Edge Shade", Range(0, 0.5)) = 0.05
-        _GradX("Face Gradient toward +x", Range(0, 0.5)) = 0.12
-        _GradZ("Face Gradient toward -z", Range(0, 0.5)) = 0.10
-        _SeamDarkness("Grout Darkness", Range(0.2, 1.0)) = 0.70
+        // Grout groove. _SeamWidth is the FLAT floor half-width; _SeamSoft is the ramp out of
+        // it. Reference groove: ~4.2% of the cell at half depth, floor at 0.53x the face.
+        _SeamWidth("Grout Floor Half-Width (cell fraction)", Range(0.002, 0.08)) = 0.022
+        _SeamSoft("Grout Edge Softness (cell fraction)", Range(0.002, 0.08)) = 0.020
+        _SeamDarkness("Grout Darkness (x face)", Range(0.2, 1.0)) = 0.55
+        _Round("Tile Corner Radius (cell fraction)", Range(0.0, 0.35)) = 0.11
+
+        // Lit chamfer, on the screen-left and screen-top edges of every tile.
+        _BevelRise("Chamfer Rise Width", Range(0.004, 0.08)) = 0.018
+        _BevelWidth("Chamfer Total Width", Range(0.02, 0.30)) = 0.085
+        _BevelLift("Chamfer Highlight (left edge)", Range(0, 1.2)) = 0.42
+        _BevelLiftZ("Chamfer Highlight (top edge)", Range(0, 1.2)) = 0.16
+
+        // Shaded chamfer, on the screen-right and screen-bottom edges.
+        _ShadeWidth("Shaded Edge Width", Range(0.02, 0.30)) = 0.085
+        _ShadeAmt("Shaded Edge Depth (right)", Range(0, 0.6)) = 0.16
+        _ShadeAmtZ("Shaded Edge Depth (bottom)", Range(0, 0.6)) = 0.22
+
+        // The reference face is flat; these stay near zero on purpose.
+        _GradX("Face Gradient toward +x", Range(0, 0.5)) = 0.03
+        _GradZ("Face Gradient toward -z", Range(0, 0.5)) = 0.03
         _FaceLevel("Tile Face Level", Range(0.6, 1.2)) = 0.96
     }
     SubShader
@@ -50,13 +76,18 @@ Shader "Case2/BoardTile"
             float _BevelContrast;
             float _VerticalGrad;
             float _SeamWidth;
+            float _SeamSoft;
+            float _SeamDarkness;
+            float _Round;
+            float _BevelRise;
             float _BevelWidth;
             float _BevelLift;
-            float _BevelShade;
-            float _TopShade;
+            float _BevelLiftZ;
+            float _ShadeWidth;
+            float _ShadeAmt;
+            float _ShadeAmtZ;
             float _GradX;
             float _GradZ;
-            float _SeamDarkness;
             float _FaceLevel;
             CBUFFER_END
 
@@ -86,55 +117,42 @@ Shader "Case2/BoardTile"
             half4 frag(Varyings input) : SV_Target
             {
                 // Per-tile UV in OBJECT space. Every Tile_i_j is its own unit cube sitting on a
-                // cell centre, so positionOS.xz + 0.5 is an exact [0..1] cell.
+                // cell centre, so positionOS.xz + 0.5 is an exact [0..1] cell. This must not go
+                // back to frac(positionWS.xz): the Board root carries a 0.5 z offset, which put
+                // every horizontal grout line through the MIDDLE of a tile.
                 //
-                // This used to be frac(positionWS.xz), which silently ignored the Board root's
-                // z offset of 0.5 and so placed every horizontal grout line through the MIDDLE
-                // of a tile - measured on frame_00.png the seam landed at screen row j2.51
-                // instead of the j2.0 cell boundary. Object space cannot drift that way.
+                // Screen mapping, established by transecting our own frame rather than guessed:
+                // higher cellUV.x is screen-RIGHT, higher cellUV.y is screen-UP.
                 float2 cellUV = saturate(input.positionOS.xz + 0.5);
-                float2 dEdge = min(cellUV, 1.0 - cellUV);
-                float edgeDist = min(dEdge.x, dEdge.y);
 
-                // 1. Grout groove, sitting exactly on the cell boundary.
-                float seam = smoothstep(0.0, _SeamWidth, edgeDist);
+                // Rounded-square tile outline. The reference tiles are rounded slabs, so the
+                // grout opens up at the corners instead of meeting in a square cross.
+                float2 q = abs(cellUV - 0.5) - (0.5 - _Round);
+                float sdf = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - _Round;
+                float edgeDist = -sdf;                       // >0 inside the tile
 
-                // 2. Bevel, with the directions taken from the reference rather than assumed.
-                //    Across one cell horizontally it reads: seam 64.9 -> bright band 76.9 just
-                //    inside the LOW-x edge -> trough 62.2 -> a steady rise to 75.0 at the high-x
-                //    edge. Vertically it reads darkest right below the top seam (66.5) and
-                //    brightest at the bottom of the cell (74.5).
-                //
-                //    CORRECTION, on a finer transect: the "bright band" was an artefact of coarse
-                //    sampling straddling the previous cell. Stepping a single cell at 0.06 the
-                //    reference reads 64.8 seam, 45.6 dark grout, then a MONOTONIC rise 59.7 -> 75.0
-                //    to the high-x edge. There is no bright band inside the low-x edge at all, so
-                //    _BevelLift is now near zero and the face gradient carries the shape.
-                //    On a tile-only patch ours already measures std 22.9 against the reference's
-                //    15.6, i.e. over-contrasted, not under - see the report for why the crop
-                //    disagrees.
-                //    So there is a sharp highlight on the low-x edge ONLY; the high-z edge is the
-                //    darkest part of the tile, not a second highlight. The previous version put a
-                //    bright band on both the low-x and the high-z edge and sloped the face the
-                //    wrong way on both axes, which is why the tiles barely moved: the seam fix
-                //    landed but the shading fought the reference instead of matching it.
-                //    (A raised slab shows its NEAR face to the camera; a cavity shows its FAR
-                //    wall. Opposite signs, same key light - both are now consistent.)
-                float bandLo = _SeamWidth;
-                float bandHi = _SeamWidth + _BevelWidth;
-                float litEdge = 1.0 - smoothstep(bandLo, bandHi, cellUV.x);
-                float trough = (1.0 - smoothstep(bandHi, bandHi + _BevelWidth * 1.6, cellUV.x))
-                             * (1.0 - litEdge);
-                float topShade = 1.0 - smoothstep(bandLo, bandHi * 2.2, 1.0 - cellUV.y);
+                // 1. Grout groove with a FLAT floor, not a hairline crossing zero.
+                float seam = smoothstep(_SeamWidth, _SeamWidth + _SeamSoft, edgeDist);
 
-                // 3. Face gradients: brighter toward high x and toward low z.
+                // 2. Lit chamfer. Distance measured from the outer lip of the groove so the
+                //    highlight sits just inside it, exactly as the reference transect shows.
+                float tX = cellUV.x - _SeamWidth;
+                float tY = (1.0 - cellUV.y) - _SeamWidth;
+                float lipX = smoothstep(0.0, _BevelRise, tX) * (1.0 - smoothstep(_BevelRise, _BevelWidth, tX));
+                float lipY = smoothstep(0.0, _BevelRise, tY) * (1.0 - smoothstep(_BevelRise, _BevelWidth, tY));
+                float lit = lipX * _BevelLift + lipY * _BevelLiftZ;
+
+                // 3. Shaded chamfer on the opposite two edges.
+                float uX = (1.0 - cellUV.x) - _SeamWidth;
+                float uY = cellUV.y - _SeamWidth;
+                float shade = (1.0 - smoothstep(0.0, _ShadeWidth, uX)) * _ShadeAmt
+                            + (1.0 - smoothstep(0.0, _ShadeWidth, uY)) * _ShadeAmtZ;
+
+                // 4. Face gradient - deliberately near zero, the reference face is flat.
                 float grad = (cellUV.x - 0.5) * _GradX - (cellUV.y - 0.5) * _GradZ;
 
                 half3 baseCol = _BaseColor.rgb;
-                half3 tileCol = baseCol * (_FaceLevel + grad
-                                           + litEdge * _BevelLift
-                                           - trough * _BevelShade
-                                           - topShade * _TopShade);
+                half3 tileCol = baseCol * max(0.0, _FaceLevel + grad + lit - shade);
                 half3 groutCol = baseCol * _SeamDarkness;
                 half3 finalCol = lerp(groutCol, tileCol, seam);
 

@@ -99,6 +99,20 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _SeamWidth: 0.022
+    - _SeamSoft: 0.02
+    - _SeamDarkness: 0.55
+    - _Round: 0.11
+    - _BevelRise: 0.018
+    - _BevelWidth: 0.085
+    - _BevelLift: 0.42
+    - _BevelLiftZ: 0.16
+    - _ShadeWidth: 0.085
+    - _ShadeAmt: 0.16
+    - _ShadeAmtZ: 0.22
+    - _GradX: 0.03
+    - _GradZ: 0.03
+    - _FaceLevel: 0.96
     - _AddPrecomputedVelocity: 0
     - _AlphaClip: 0
     - _AlphaToMask: 0
@@ -135,7 +149,7 @@ Material:
     - _XRMotionVectorsPass: 1
     - _ZWrite: 1
     m_Colors:
-    - _BaseColor: {r: 0.21, g: 0.26, b: 0.465, a: 1}
+    - _BaseColor: {r: 0.2792, g: 0.3151, b: 0.4249, a: 1}
     - _Color: {r: 0.26999995, g: 0.37799996, b: 0.63799995, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
