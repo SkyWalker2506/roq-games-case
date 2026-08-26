@@ -114,12 +114,24 @@ public static class Case3PageEntries
     };
 
     // ---- counter geometry, in the card sprite's own pixels (276 x 356 at 100 px/unit).
-    // The empty inset band on card_filled_*.png measures x 32..260, y 280..312 from the top.
+    //
+    // MOVED. It used to sit in an empty inset band across the card's bottom - a band that was
+    // OURS and not the reference's, recorded as a deviation and left as a decision. The owner
+    // has since asked for the reference's proportions on these cards, so the band is gone
+    // (tools/generate_case3_consistent_art.py) and the counter is back where the reference
+    // prints it: over the bottom right of the art itself.
+    //
+    // The reference's numbers, off the card_filled_* crops: glyphs 16.4% of the PANEL's
+    // height, right edge at 96.7% of the panel's width. Our panel - the frame's opening,
+    // below the name tab - is x 24..252, y 64..326, so 228 x 262 sprite pixels. That puts
+    // the glyphs at 0.164 * 262 = 43 px tall with their right edge at 24 + 0.967 * 228 = 244.
     const float CardPixelsPerUnit = 100f;
-    // tools/generate_case3_consistent_art.py draws the band at [32, 280] .. [244, 316].
     const float CardW = 276f, CardH = 356f;
-    const float BandCentreX = 138f, BandCentreY = 298f;      // sprite pixels, y down from the top
-    const float BandW = 212f, BandH = 36f;
+    const float PanelX0 = 24f, PanelY0 = 64f, PanelX1 = 252f, PanelY1 = 326f;
+    const float GlyphPx = 43f;                               // 16.4% of the panel's height
+    const float BandW = 104f, BandH = 52f;
+    const float BandCentreX = 244.5f - BandW * 0.5f;         // right edge at 96.7% of the panel
+    const float BandCentreY = PanelY1 - 10f - BandH * 0.5f;  // sitting on the panel's bottom
     /// <summary>Reference glyph fill, sampled off Stickerdom.mp4's Cat card at RGB(140, 38, 28).</summary>
     static readonly Color CounterInk = new Color(140f / 255f, 38f / 255f, 28f / 255f, 1f);
 
@@ -205,12 +217,51 @@ public static class Case3PageEntries
         director.stacks = BuildStacks(scene, log);
         EditorUtility.SetDirty(director);
 
+        AssertStacksCanHoldThePage(director, log);
+
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
 
         log.Insert(0, "[Case3PageEntries] " + entries.Count + " collectible item(s) across " +
                       director.stacks.Length + " card(s); " + PagePrint.Length + " page-print item(s) left as decor\n");
         Debug.Log(log.ToString());
+    }
+
+    /// <summary>
+    /// A card cannot be asked for fewer than the page can deliver.
+    ///
+    /// WHY THIS EXISTS. The owner's screenshot shows a counter reading 6/5 - a stack over its own
+    /// maximum. It is not a display bug: Case3Director.PushStack increments Collected with no
+    /// ceiling, and this table hands the Noodle card six items (Sticker_Noodle, Sticker_Noodle3 and
+    /// four PageObj ramen) and the Sweets card six (Sticker_Sweets plus choc, marshmallows,
+    /// croissant, bunplate, pie) against a stackRequirement of 5. Collect them all and the card
+    /// reads 6/5. Cat is the only card that cannot: it has two.
+    ///
+    /// The population is authored HERE, so the mismatch is detectable here. The fix is not: a card
+    /// that asks for a different number than its neighbours needs a per-card requirement on
+    /// Case3Director.StackCard, which this pass does not own. So this reports the exact violation
+    /// with the exact numbers rather than clamping the count, because clamping would print 5/5 while
+    /// six sit on the card - a wrong number instead of an impossible one.
+    /// </summary>
+    static void AssertStacksCanHoldThePage(Case3Director director, StringBuilder log)
+    {
+        Dictionary<string, int> population = new Dictionary<string, int>();
+        for (int i = 0; i < director.entries.Length; i++)
+        {
+            string k = director.entries[i].key;
+            population[k] = (population.TryGetValue(k, out int n) ? n : 0) + 1;
+        }
+        foreach (KeyValuePair<string, int> kv in population)
+        {
+            log.AppendLine(string.Format("  POPULATION {0}: {1} collectible(s) against a requirement of {2}",
+                kv.Key, kv.Value, director.stackRequirement));
+            if (kv.Value > director.stackRequirement)
+                Debug.LogError(string.Format(
+                    "[Case3PageEntries] STACK_OVERFLOW the '{0}' card can reach {1}/{2}: the page carries " +
+                    "{1} items of that kind and Case3Director.stackRequirement is {2}. Give StackCard its " +
+                    "own requirement, or take {3} item(s) of this kind off the page.",
+                    kv.Key, kv.Value, director.stackRequirement, kv.Value - director.stackRequirement));
+        }
     }
 
     /// <summary>
@@ -331,12 +382,19 @@ public static class Case3PageEntries
 
         tmp.font = Shared.Sequencing.UIStyle.FontAsset;
         tmp.text = "0/5";
-        tmp.fontSize = 2.4f;
+        // TMP's fontSize is in the same units the rect is, times ten; the cap height of this
+        // face is 0.72 em, so a 43 px glyph on a 100 px/unit sprite wants
+        //   43 / 100 / 0.72 * 10 = 5.97. MEASURED back off a game-view capture, not assumed.
+        tmp.fontSize = 5.97f;
         tmp.enableAutoSizing = false;
         tmp.fontStyle = FontStyles.Bold;
         tmp.color = CounterInk;
         tmp.alignment = TextAlignmentOptions.Right;
-        tmp.margin = new Vector4(0f, 0f, 0.10f, 0f);
+        tmp.margin = Vector4.zero;
+        // The reference's counter is a dark red with a white outline, because it is printed
+        // over the art rather than into an empty band and has to stay legible on top of it.
+        tmp.outlineColor = Color.white;
+        tmp.outlineWidth = 0.22f;
         tmp.enableWordWrapping = false;
         tmp.raycastTarget = false;
         tmp.enabled = false;                     // nothing collected yet

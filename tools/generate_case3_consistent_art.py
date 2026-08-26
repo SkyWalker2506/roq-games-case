@@ -2,33 +2,76 @@ import os, sys, math
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import numpy as np
 
-def apply_die_cut_border_clean(art_img, padding=14):
-    """Generates crisp white die-cut border with clean bright antialiasing and NO baked shadow."""
+def _edt(mask):
+    """Exact Euclidean distance from every False pixel to the nearest True one."""
+    def d1(f):
+        n = len(f); d = np.empty(n); v = np.zeros(n, dtype=int); z = np.empty(n + 1)
+        k = 0; z[0] = -np.inf; z[1] = np.inf
+        for q in range(1, n):
+            s_ = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2.0 * q - 2.0 * v[k])
+            while s_ <= z[k]:
+                k -= 1
+                s_ = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2.0 * q - 2.0 * v[k])
+            k += 1; v[k] = q; z[k] = s_; z[k + 1] = np.inf
+        k = 0
+        for q in range(n):
+            while z[k + 1] < q: k += 1
+            d[q] = (q - v[k]) ** 2 + f[v[k]]
+        return d
+    f = np.where(mask, 0.0, 1e12)
+    out = np.empty_like(f)
+    for y in range(f.shape[0]): out[y] = d1(f[y])
+    for x in range(f.shape[1]): out[:, x] = d1(out[:, x])
+    return np.sqrt(out)
+
+
+def die_cut_outset(art_img, width=9.0, aa=1.5, rim=(255, 255, 255)):
+    """A REAL die cut: the art's hard silhouette, outset by a constant `width` pixels,
+    with an `aa`-pixel antialiased edge. Nothing else.
+
+    The old apply_die_cut_border_clean did threshold(gaussian_blur(alpha)) instead. That is
+    not an outset - the offset a threshold produces depends on the LOCAL SHAPE, so it
+    rounded convex corners off, bulged into concavities and deleted thin features (a 3 px
+    chopstick blurred by sigma 8.4 peaks at 36/255 against a threshold of 35). Distance is
+    the only thing that gives a constant width, so distance is what this measures.
+
+    The page's rim comes from Case3/PageObjectRim at render time, on the same rule and the
+    same measured 9.0 px / 1.5 px numbers. This function exists for the one place a rim has
+    to be BAKED - compositing a sticker into a reward card's art, where there is no
+    renderer to hang a rim child on.
+    """
+    pad = int(np.ceil(width + aa + 2))
     w, h = art_img.size
-    out_w, out_h = w + padding*2, h + padding*2
-    alpha = art_img.split()[-1]
-    
-    # Dilate mask for crisp white die-cut border
-    border_mask = Image.new('L', (out_w, out_h), 0)
-    border_mask.paste(alpha, (padding, padding))
-    dilated = border_mask.filter(ImageFilter.GaussianBlur(padding * 0.60))
-    dilated_arr = np.array(dilated)
-    die_cut_alpha = np.where(dilated_arr > 35, 255, 0).astype(np.uint8)
-    die_cut_img = Image.fromarray(die_cut_alpha, 'L').filter(ImageFilter.GaussianBlur(1.0))
-    
-    # Crisp warm-white die-cut border (no shadow underneath!)
-    base_arr = np.zeros((out_h, out_w, 4), dtype=np.uint8)
-    base_arr[:, :, 0] = 252
-    base_arr[:, :, 1] = 248
-    base_arr[:, :, 2] = 240
-    base_arr[:, :, 3] = np.array(die_cut_img)
-    die_cut_base = Image.fromarray(base_arr, 'RGBA')
-    
-    # Combine: die-cut white -> artwork
-    final_img = Image.new('RGBA', (out_w, out_h), (0, 0, 0, 0))
-    final_img.paste(die_cut_base, (0, 0), die_cut_base)
-    final_img.paste(art_img, (padding, padding), art_img)
-    return final_img
+    canvas = Image.new('RGBA', (w + pad * 2, h + pad * 2), (0, 0, 0, 0))
+    canvas.paste(art_img, (pad, pad), art_img)
+    a = np.array(canvas)
+    solid = a[..., 3] >= 128
+    d = _edt(solid)
+    cover = np.clip((width + aa * 0.5 - d) / aa, 0.0, 1.0)
+    base = np.zeros(a.shape, np.uint8)
+    base[..., 0], base[..., 1], base[..., 2] = rim
+    base[..., 3] = (cover * 255).astype(np.uint8)
+    out = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
+    out.alpha_composite(Image.fromarray(base, 'RGBA'))
+    out.alpha_composite(canvas)
+    return out
+
+
+def apply_die_cut_border_clean(art_img, padding=14):
+    """PADDING ONLY - the border is no longer painted into the sticker sheets.
+
+    Every Sticker_* renderer carries a Rim child running Case3/PageObjectRim, which draws
+    the die cut as a constant-width outset of the silhouette at render time. A border baked
+    in here as well would be drawn twice, and the baked one is the worse of the two: see
+    die_cut_outset above for why threshold(blur(alpha)) is not an outset. The padding is
+    kept at its original 14 px because it is the transparent margin the shader dilates into,
+    and because changing the canvas size would move every sticker on the page.
+    """
+    w, h = art_img.size
+    out = Image.new('RGBA', (w + padding * 2, h + padding * 2), (0, 0, 0, 0))
+    out.paste(art_img, (padding, padding), art_img)
+    return out
+
 
 # 1. PageBackground.png (1024x1024)
 def make_page_background():
@@ -378,28 +421,80 @@ def _draw_name_tab(img, key, w, h):
     _draw_paperclip(img, (cx0, cy0, cx0 + cw, cy0 + ch), clip)
 
 
+# ---- the reward card's panel, and how much of it the subject is supposed to fill.
+#
+# MEASURED off the reference crops with tools/case3_card_metrics.py, which finds the panel
+# as the bounding box of the lilac grid paper (clamped below the name tab, inset 3 px) and
+# the subject as the largest blob that is not that paper:
+#
+#                  bbox fill   subject w    subject h   margins L / R / T / B  (% of panel)
+#   ref cat            83.5%       89.7%        93.1%      4.9  5.4  6.9  0.0
+#   ref noodle        100.0%      100.0%       100.0%      0.0  0.0  0.0  0.0
+#   ref sweets         52.1%       55.5%        94.0%     23.2 21.4  6.0  0.0
+#   ref MEDIAN         83.5%       89.7%        94.0%      4.9  5.4  6.0  0.0
+#
+#   ours, before       20.8%       47.1%        49.4%     29.8 23.1 15.2 35.4
+#
+# Two things fall straight out of that table. The subject is scaled until it hits ~90% of
+# the panel's width or ~94% of its height, whichever binds first - the candy cane is only
+# 55% wide because it is a narrow object that ran out of height, not because it was drawn
+# small. And on ALL THREE cards the bottom margin is 0.0: the reference lets the subject run
+# off the bottom edge of the panel rather than float above it. Ours did neither: it sat at
+# half size with an even margin all round, plus an empty inset band across the bottom that
+# the reference does not have at all. The band is gone with this change and the counter has
+# moved to where the reference prints it, over the bottom right of the art.
+CARD_W, CARD_H = 276, 356
+CARD_OUTER = (8, 8, CARD_W - 8, CARD_H - 14)     # the card's own rounded edge
+CARD_INNER = (18, 18, CARD_W - 18, CARD_H - 24)  # the panel's frame
+PANEL = (24, 64, 252, 326)                       # the opening: inside the frame, below the tab
+PANEL_FILL_W = 0.90                              # reference median subject width
+PANEL_FILL_H = 0.94                              # reference median subject height
+CARD_RIM_PX = 9.0                                # the same die cut the page wears
+CARD_RIM_AA = 1.5
+
+
 def make_reward_card(name, art_type, bg_color):
-    w, h = 276, 356
+    w, h = CARD_W, CARD_H
     img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([8, 8, w - 8, h - 14], radius=22, fill=(210, 178, 145, 255), outline=(175, 140, 108, 255), width=3)
-    draw.rounded_rectangle([18, 18, w - 18, h - 24], radius=16, fill=bg_color, outline=(195, 165, 132, 255), width=2)
+    draw.rounded_rectangle(list(CARD_OUTER), radius=22, fill=(210, 178, 145, 255),
+                           outline=(175, 140, 108, 255), width=3)
+    draw.rounded_rectangle(list(CARD_INNER), radius=16, fill=bg_color,
+                           outline=(195, 165, 132, 255), width=2)
 
-    if art_type == 'cat':
-        sticker_src = Image.open('Assets/Case3_Stickerdom/Sprites/Stickers/sticker_cat.png')
-    elif art_type == 'noodle':
-        sticker_src = Image.open('Assets/Case3_Stickerdom/Sprites/Stickers/sticker_noodle.png')
-    else:
-        sticker_src = Image.open('Assets/Case3_Stickerdom/Sprites/Stickers/sticker_sweets.png')
+    src = {
+        'cat': 'sticker_cat',
+        'noodle': 'sticker_noodle',
+        'sweets': 'sticker_sweets',
+    }[art_type]
+    sticker_src = Image.open(f'Assets/Case3_Stickerdom/Sprites/Stickers/{src}.png')
 
-    sw, sh = sticker_src.size
-    scale = min(180.0 / sw, 180.0 / sh)
-    scaled_sticker = sticker_src.resize((int(sw * scale), int(sh * scale)), Image.LANCZOS)
-    sx = (w - scaled_sticker.width) // 2
-    sy = 80 + (190 - scaled_sticker.height) // 2
-    img.paste(scaled_sticker, (sx, sy), scaled_sticker)
+    # The sheets no longer carry a baked border - the shader draws theirs - so the card's
+    # copy gets its own, generated by the same rule at the same width, AFTER scaling, so the
+    # rim is 9 px on the card rather than 9 px times whatever the scale happened to be.
+    art = sticker_src.crop(sticker_src.getbbox())
+    px0, py0, px1, py1 = PANEL
+    pw, ph = px1 - px0, py1 - py0
+    room_w = PANEL_FILL_W * pw - 2 * CARD_RIM_PX
+    room_h = PANEL_FILL_H * ph - 2 * CARD_RIM_PX
+    scale = min(room_w / art.width, room_h / art.height)
+    art = art.resize((max(1, int(round(art.width * scale))),
+                      max(1, int(round(art.height * scale)))), Image.LANCZOS)
+    subject = die_cut_outset(art, CARD_RIM_PX, CARD_RIM_AA)
 
-    draw.rounded_rectangle([32, 280, w - 32, 316], radius=10, fill=(236, 222, 205, 255), outline=(192, 160, 128, 255), width=2)
+    # centred across the panel, flush to its bottom edge, the way the reference sets it
+    sx = px0 + (pw - subject.width) // 2
+    sy = py1 - subject.height
+    layer = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    layer.paste(subject, (sx, sy), subject)
+
+    # ... and clipped to the panel's own rounded opening, because "flush to the bottom"
+    # means the subject runs off the edge, not over the frame.
+    clip = Image.new('L', (w, h), 0)
+    ImageDraw.Draw(clip).rounded_rectangle(list(CARD_INNER), radius=16, fill=255)
+    layer.putalpha(Image.fromarray(
+        (np.array(layer.split()[-1]).astype(np.uint16) * np.array(clip) // 255).astype(np.uint8), 'L'))
+    img.alpha_composite(layer)
 
     # the name tab goes on last: in the reference it is pinned OVER the card, and its
     # paperclip stands proud of the card's own top edge.

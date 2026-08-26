@@ -81,6 +81,20 @@ namespace Case3.EditorTools
             UnityEditor.SceneManagement.EditorSceneManager.SaveScene(scene);
         }
 
+        /// <summary>
+        /// Rim, then re-wire. Both, in that order, in one batchmode run.
+        ///
+        /// The order matters and is not cosmetic: Case3PageEntries.MakeEntry hands each item's
+        /// "Rim" child to its StickerPeel as a COMPANION, so the die cut travels with the sticker
+        /// when it peels off the page instead of staying behind as a white silhouette of something
+        /// that has already flown away. A Rim created after that wiring would be an orphan.
+        /// </summary>
+        public static void ApplyAndWire()
+        {
+            ApplyToStickerdom();
+            Case3PageEntries.Build();
+        }
+
         /// <summary>Idempotent. Safe to run on an already-rimmed scene; it rewrites, never stacks.</summary>
         public static void Apply(Scene scene)
         {
