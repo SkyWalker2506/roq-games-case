@@ -139,16 +139,19 @@ public static class Case3CoverageGate
                     return;
                 }
 
+                NegativeControl(director);
+
                 // ---- control: the instrument must actually find the overlap it exists to police.
                 // If every pair measured 0, "covered items are dim" would pass on a page with no
                 // covered items and prove nothing at all.
                 _victim = -1;
-                _victimCoverAtRest = 0f;
+                float worst = 0f;
                 for (int i = 0; i < director.Count; i++)
                 {
                     float c = GateCoverage(director, i);
-                    if (c > _victimCoverAtRest) { _victimCoverAtRest = c; _victim = i; }
+                    if (c > worst) { worst = c; _victim = i; }
                 }
+                _victimCoverAtRest = worst;
                 if (_victim < 0 || _victimCoverAtRest < CoverThreshold)
                 {
                     Fail("CONTROL", "no sticker on this page is covered by another (worst overlap " +
@@ -167,11 +170,17 @@ public static class Case3CoverageGate
                 // found nothing for have to stay at zero.
                 Debug.Log("[Case3Coverage] CONTROL alpha-vs-box: " + BoxVsAlpha(director));
 
-                // ---- pick the sheet that is DRAWN OVER the victim and lift it
-                _tapIndex = CoveringOf(director, _victim);
-                if (_tapIndex < 0)
+                // ---- pick a victim whose cover can actually be LIFTED OFF.
+                // The worst-covered item on the page is not necessarily the right test: PageObj_pie
+                // is 66% buried, but under TWO sheets, so lifting either one leaves it buried and
+                // the promotion assertion fails on a page that is behaving correctly. What the
+                // assertion needs is a pair where removing the coverer really does uncover the
+                // victim, so it is found by simulation - hide each candidate coverer, re-measure the
+                // victim, and keep the pair with the largest drop that lands under the threshold.
+                if (!PickPromotionPair(director, out _victim, out _tapIndex, out _victimCoverAtRest))
                 {
-                    Fail("CONTROL", "the covered sticker has no covering sticker; the measurement is inconsistent");
+                    Fail("CONTROL", "no item on this page is covered by a single liftable sheet, so the " +
+                         "promotion assertion has nothing to test");
                     Finish(null, 1);
                     return;
                 }
@@ -233,16 +242,38 @@ public static class Case3CoverageGate
     // ------------------------------------------------------------------ the invariant
 
     /// <summary>
-    /// One sentence, checked in both directions it actually claims:
-    ///   covered  -> dim AND not tappable
-    ///   tappable -> lit
-    /// The converse (uncovered -> lit) is NOT asserted; the reference's page print refutes it.
+    /// The owner's sentence, checked in BOTH directions:
+    ///
+    ///     dim  &lt;=&gt;  something is drawn on top of it
+    ///
+    /// which unpacks into
+    ///     covered   -> dim AND not tappable
+    ///     uncovered -> lit AND tappable
+    ///
+    /// The second half used to be excluded here, on the reading that "the reference's page print is
+    /// uncovered and stays dim forever". The owner, who played the reference, states the opposite and
+    /// that reading is withdrawn: anything with nothing on top of it must be lit, and a page item
+    /// that is meant to stay dim has to be genuinely buried. The whole page is now held to it - the
+    /// nine page objects and the two strip decoys included, none of which the director previously
+    /// knew existed.
+    ///
+    /// Returns the number of violations. Only the reported pass counts them into the gate's tally;
+    /// the negative control runs the same scan silently so it can prove the assertion has teeth.
     /// </summary>
-    static void CheckInvariant(Case3Director director, string where)
+    static int ScanInvariant(Case3Director director, string where, bool report)
     {
+        // MID-LIFT IS A TRANSITION, AND THE REFERENCE SAYS SO. A sheet that is peeling has already
+        // swapped its SpriteRenderer for the curl mesh, so it measures as covering nothing, while it
+        // is still visibly lying across the page. The promotion it triggers deliberately lands at
+        // PEEL COMPLETION - the reference's jar is uncovered at t=4.11 as the sheet comes free, not
+        // when the corner first lifts. So "uncovered must be lit" is asked of settled states only.
+        // "Covered must be dim and untappable" is asked every single frame, transition included,
+        // because there is no moment at which a buried item may be tapped.
+        bool settled = where != "DURING";
         Camera cam = director.sceneCamera != null ? director.sceneCamera : Camera.main;
-        if (cam == null) { Fail(where, "no camera"); return; }
+        if (cam == null) { if (report) Fail(where, "no camera"); return 1; }
 
+        int violations = 0;
         for (int i = 0; i < director.Count; i++)
         {
             Case3Director.Entry e = director.entries[i];
@@ -250,44 +281,150 @@ public static class Case3CoverageGate
             // A sheet in mesh mode is not drawn as a sprite at all; it is neither covering nor covered.
             if (!e.sticker.enabled) continue;
 
-            _checks++;
+            if (report) _checks++;
             float cover = GateCoverage(director, i);
             bool dim = IsDim(director, i);
 
             if (cover >= CoverThreshold)
             {
                 if (!dim)
-                    Fail(e.sticker.name, where + ": covered " + (cover * 100f).ToString("0.00") +
-                         "% by a sheet above it but drawn lit");
+                {
+                    violations++;
+                    if (report) Fail(e.sticker.name, where + ": covered " + (cover * 100f).ToString("0.00") +
+                                     "% by a sheet above it but drawn lit");
+                }
 
                 Vector3 art = GateArtPoint(director, i);
                 int picked = director.PickSticker(cam.WorldToScreenPoint(art));
                 if (picked == i)
-                    Fail(e.sticker.name, where + ": covered " + (cover * 100f).ToString("0.00") +
-                         "% but a tap at " + art + " still peels it");
+                {
+                    violations++;
+                    if (report) Fail(e.sticker.name, where + ": covered " + (cover * 100f).ToString("0.00") +
+                                     "% but a tap at " + art + " still peels it");
+                }
             }
-            else
+            else if (settled)
             {
-                // tappable -> lit. Asked of the director, answered by the renderer.
-                if (director.Playable(i) && dim)
-                    Fail(e.sticker.name, where + ": tappable but drawn dim");
+                if (dim)
+                {
+                    violations++;
+                    if (report) Fail(e.sticker.name, where + ": nothing is drawn on top of it (covered " +
+                                     (cover * 100f).ToString("0.00") + "%) but it is drawn dim, so the page " +
+                                     "is telling the player it cannot be collected when it can");
+                }
+                if (!director.Playable(i))
+                {
+                    violations++;
+                    if (report) Fail(e.sticker.name, where + ": uncovered but the director will not play it");
+                }
             }
+        }
+        return violations;
+    }
+
+    static void CheckInvariant(Case3Director director, string where)
+    {
+        ScanInvariant(director, where, true);
+        CheckPagePrint(director, where);
+    }
+
+    /// <summary>
+    /// Proves both halves of the invariant can actually go red, on this scene, in this run.
+    ///
+    /// A green gate is worthless if the assertion cannot fail. So each direction is broken on purpose
+    /// against a real item, the scan is re-run silently, and the gate fails if the scan did NOT
+    /// notice. The damage is undone immediately and the reported scan runs afterwards, so the run
+    /// that proves the assertion red is the same run that reports it green.
+    /// </summary>
+    static void NegativeControl(Case3Director director)
+    {
+        Material dim = director.dimMaterial;
+        if (dim == null) { Fail("NEGCONTROL", "no dim material to work with"); return; }
+
+        int lit = -1, covered = -1;
+        for (int i = 0; i < director.Count; i++)
+        {
+            Case3Director.Entry e = director.entries[i];
+            if (e == null || e.sticker == null || !e.sticker.enabled || e.Consumed) continue;
+            float c = GateCoverage(director, i);
+            if (c < CoverThreshold && !IsDim(director, i) && lit < 0) lit = i;
+            if (c >= CoverThreshold && IsDim(director, i) && covered < 0) covered = i;
+        }
+
+        // ---- half one: an uncovered item drawn dim must be caught.
+        if (lit < 0) Fail("NEGCONTROL", "no uncovered, lit item exists to break");
+        else
+        {
+            SpriteRenderer sr = director.entries[lit].sticker;
+            Material was = sr.sharedMaterial;
+            sr.sharedMaterial = dim;
+            int seen = ScanInvariant(director, "NEGCONTROL", false);
+            sr.sharedMaterial = was;
+            int clean = ScanInvariant(director, "NEGCONTROL", false);
+            if (seen == 0)
+                Fail("NEGCONTROL", "dimming the uncovered " + sr.name + " produced no violation, so " +
+                     "'uncovered must be lit' is not actually asserted");
+            else if (clean != 0)
+                Fail("NEGCONTROL", "the page did not come back clean after the control (" + clean + " left)");
+            else
+                Debug.Log("[Case3Coverage] NEGCONTROL uncovered->lit has teeth: dimming " + sr.name +
+                          " raised " + seen + " violation(s), restoring it cleared them");
+        }
+
+        // ---- half two: a covered item drawn lit must be caught.
+        if (covered < 0) Fail("NEGCONTROL", "no covered, dim item exists to break");
+        else
+        {
+            SpriteRenderer sr = director.entries[covered].sticker;
+            Material was = sr.sharedMaterial;
+            Material litMat = director.entries[covered].litMaterial;
+            if (litMat == null) { Fail("NEGCONTROL", sr.name + " has no lit material to force"); return; }
+            sr.sharedMaterial = litMat;
+            int seen = ScanInvariant(director, "NEGCONTROL", false);
+            sr.sharedMaterial = was;
+            int clean = ScanInvariant(director, "NEGCONTROL", false);
+            if (seen == 0)
+                Fail("NEGCONTROL", "lighting the covered " + sr.name + " produced no violation, so " +
+                     "'covered must be dim' is not actually asserted");
+            else if (clean != 0)
+                Fail("NEGCONTROL", "the page did not come back clean after the control (" + clean + " left)");
+            else
+                Debug.Log("[Case3Coverage] NEGCONTROL covered->dim has teeth: lighting " + sr.name +
+                          " raised " + seen + " violation(s), restoring it cleared them");
         }
     }
 
     // ------------------------------------------------------------------ the gate's own measurements
 
     /// <summary>
-    /// Fraction of sticker i's own drawn area that a sticker with a HIGHER sorting order also draws
+    /// EVERY sprite drawn on the page or on the strip, entry or not.
+    ///
+    /// The gate used to ask the coverage question over the director's entries alone. That was fine
+    /// while the entries WERE the page, and wrong the moment the page got its own drawn objects: a
+    /// decor item lying over a collectible would not have counted as covering it, and the decor items
+    /// themselves - the ones the owner saw sitting dim over nothing - would not have been looked at
+    /// at all. The gate builds this list from the scene, by name, so it is not asking the director
+    /// which sprites it believes are on the page.
+    /// </summary>
+    static SpriteRenderer[] PageSprites()
+    {
+        var list = new System.Collections.Generic.List<SpriteRenderer>();
+        foreach (SpriteRenderer sr in Object.FindObjectsByType<SpriteRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            if (!sr.gameObject.activeInHierarchy) continue;
+            if (sr.name.StartsWith("PageObj_") || sr.name.StartsWith("Sticker_")) list.Add(sr);
+        }
+        return list.ToArray();
+    }
+
+    /// <summary>
+    /// Fraction of a sprite's own DRAWN area that a sprite with a HIGHER sorting order also draws
     /// opaquely. Computed here, from the sprites, at a different grid resolution from the director's.
     /// </summary>
-    static float GateCoverage(Case3Director director, int index)
+    static float CoverageOf(SpriteRenderer target, SpriteRenderer[] page)
     {
-        if (index < 0 || index >= director.Count) return 0f;
-        Case3Director.Entry e = director.entries[index];
-        if (e == null || e.sticker == null || e.Consumed || !e.sticker.enabled) return 0f;
-
-        Bounds b = e.sticker.bounds;
+        if (target == null || !target.enabled) return 0f;
+        Bounds b = target.bounds;
         int drawn = 0, hidden = 0;
         for (int yi = 0; yi < Samples; yi++)
         {
@@ -297,32 +434,118 @@ public static class Case3CoverageGate
                 float fx = (xi + 0.5f) / Samples;
                 Vector3 p = new Vector3(Mathf.Lerp(b.min.x, b.max.x, fx),
                                         Mathf.Lerp(b.min.y, b.max.y, fy), b.center.z);
-                if (Alpha(e.sticker, p) < Case3Director.TapAlphaThreshold) continue;
+                if (Alpha(target, p) < Case3Director.TapAlphaThreshold) continue;
                 drawn++;
-                if (TopSpriteAt(director, p) != index) hidden++;
+                if (TopSpriteAt(page, p) != target) hidden++;
             }
         }
         return drawn == 0 ? 0f : (float)hidden / drawn;
     }
 
-    /// <summary>Index of the sticker drawn on top at a world point, or -1. The gate's own answer.</summary>
-    static int TopSpriteAt(Case3Director director, Vector3 world)
+    static float GateCoverage(Case3Director director, int index)
     {
-        int hit = -1;
+        if (index < 0 || index >= director.Count) return 0f;
+        Case3Director.Entry e = director.entries[index];
+        if (e == null || e.sticker == null || e.Consumed || !e.sticker.enabled) return 0f;
+        return CoverageOf(e.sticker, PageSprites());
+    }
+
+    /// <summary>The sprite drawn on top at a world point, or null. The gate's own answer.</summary>
+    static SpriteRenderer TopSpriteAt(SpriteRenderer[] page, Vector3 world)
+    {
+        SpriteRenderer hit = null;
         int best = int.MinValue;
-        for (int j = 0; j < director.Count; j++)
+        for (int j = 0; j < page.Length; j++)
         {
-            Case3Director.Entry o = director.entries[j];
-            if (o == null || o.sticker == null || o.Consumed || !o.sticker.enabled) continue;
-            if (Alpha(o.sticker, world) < Case3Director.TapAlphaThreshold) continue;
-            if (o.sticker.sortingOrder > best) { best = o.sticker.sortingOrder; hit = j; }
+            SpriteRenderer o = page[j];
+            if (o == null || !o.enabled) continue;
+            if (Alpha(o, world) < Case3Director.TapAlphaThreshold) continue;
+            if (o.sortingOrder > best) { best = o.sortingOrder; hit = o; }
         }
         return hit;
     }
 
-    /// <summary>The sticker drawn immediately over the given one, or -1.</summary>
+    /// <summary>
+    /// The decor half of the invariant.
+    ///
+    /// A page object that is not an entry can never be collected, so it is dim forever. Under
+    /// "dim if and only if something is on top of it" that is only honest when something really is
+    /// on top of it. These are the items the owner pointed at: dim, with clear page all around them,
+    /// reading as collectible and doing nothing when tapped. Checked against the whole page.
+    /// </summary>
+    static void CheckPagePrint(Case3Director director, string where)
+    {
+        SpriteRenderer[] page = PageSprites();
+        for (int i = 0; i < page.Length; i++)
+        {
+            SpriteRenderer sr = page[i];
+            if (!sr.enabled) continue;
+
+            bool isEntry = false;
+            for (int j = 0; j < director.Count; j++)
+                if (director.entries[j] != null && director.entries[j].sticker == sr) { isEntry = true; break; }
+            if (isEntry) continue;
+
+            _checks++;
+            float cover = CoverageOf(sr, page);
+            if (cover < CoverThreshold)
+                Fail(sr.name, where + ": page decor, so it is dim and untappable forever, but only " +
+                     (cover * 100f).ToString("0.00") + "% of it is under anything - it reads as a " +
+                     "collectible sticker that does nothing. Bury it or make it collectible.");
+        }
+    }
+
+    /// <summary>
+    /// Finds a (victim, coverer) pair where lifting the coverer genuinely uncovers the victim.
+    ///
+    /// Both must be entries - the coverer because the gate has to lift it, the victim because the
+    /// gate then asks the director whether it became playable. Each candidate coverer is switched off
+    /// and the victim re-measured, so the answer is a measurement of the page rather than an
+    /// assumption that "most covered" means "covered by one thing".
+    /// </summary>
+    static bool PickPromotionPair(Case3Director director, out int victim, out int coverer, out float coverAtRest)
+    {
+        victim = -1; coverer = -1; coverAtRest = 0f;
+        SpriteRenderer[] page = PageSprites();
+
+        for (int v = 0; v < director.Count; v++)
+        {
+            Case3Director.Entry ev = director.entries[v];
+            if (ev == null || ev.sticker == null || !ev.sticker.enabled || ev.Consumed) continue;
+            float before = CoverageOf(ev.sticker, page);
+            if (before < CoverThreshold || before <= coverAtRest) continue;
+
+            for (int c = 0; c < director.Count; c++)
+            {
+                if (c == v) continue;
+                Case3Director.Entry ec = director.entries[c];
+                if (ec == null || ec.sticker == null || !ec.sticker.enabled || ec.Consumed) continue;
+                if (ec.sticker.sortingOrder <= ev.sticker.sortingOrder) continue;
+                if (!director.Playable(c)) continue;
+
+                ec.sticker.enabled = false;
+                float after = CoverageOf(ev.sticker, page);
+                ec.sticker.enabled = true;
+                if (after >= CoverThreshold) continue;
+
+                victim = v; coverer = c; coverAtRest = before;
+                break;
+            }
+        }
+        if (victim >= 0)
+            Debug.Log(string.Format(
+                "[Case3Coverage] promotion pair chosen by simulation: lifting {0} takes {1} from {2:0.00}% " +
+                "covered to under the {3:0.00}% threshold",
+                director.entries[coverer].sticker.name, director.entries[victim].sticker.name,
+                coverAtRest * 100f, CoverThreshold * 100f));
+        return victim >= 0;
+    }
+
+    /// <summary>The ENTRY drawn immediately over the given one, or -1. It must be an entry: the gate
+    /// lifts whatever this returns, and only an entry can be lifted.</summary>
     static int CoveringOf(Case3Director director, int index)
     {
+        SpriteRenderer[] page = PageSprites();
         Case3Director.Entry e = director.entries[index];
         Bounds b = e.sticker.bounds;
         int found = -1;
@@ -336,10 +559,15 @@ public static class Case3CoverageGate
                 Vector3 p = new Vector3(Mathf.Lerp(b.min.x, b.max.x, fx),
                                         Mathf.Lerp(b.min.y, b.max.y, fy), b.center.z);
                 if (Alpha(e.sticker, p) < Case3Director.TapAlphaThreshold) continue;
-                int top = TopSpriteAt(director, p);
-                if (top < 0 || top == index) continue;
-                int order = director.entries[top].sticker.sortingOrder;
-                if (order > bestOrder) { bestOrder = order; found = top; }
+                SpriteRenderer top = TopSpriteAt(page, p);
+                if (top == null || top == e.sticker) continue;
+                if (top.sortingOrder <= bestOrder) continue;
+                for (int j = 0; j < director.Count; j++)
+                {
+                    if (director.entries[j] == null || director.entries[j].sticker != top) continue;
+                    bestOrder = top.sortingOrder; found = j;
+                    break;
+                }
             }
         }
         return found;
@@ -348,6 +576,7 @@ public static class Case3CoverageGate
     /// <summary>A world point where this sticker is genuinely drawn and not hidden by anything.</summary>
     static Vector3 GateArtPoint(Case3Director director, int index)
     {
+        SpriteRenderer[] page = PageSprites();
         Case3Director.Entry e = director.entries[index];
         Bounds b = e.sticker.bounds;
         for (int yi = 0; yi < Samples; yi++)
@@ -359,7 +588,7 @@ public static class Case3CoverageGate
                 Vector3 p = new Vector3(Mathf.Lerp(b.min.x, b.max.x, fx),
                                         Mathf.Lerp(b.min.y, b.max.y, fy), b.center.z);
                 if (Alpha(e.sticker, p) < Case3Director.TapAlphaThreshold) continue;
-                if (TopSpriteAt(director, p) == index) return p;
+                if (TopSpriteAt(page, p) == e.sticker) return p;
             }
         }
         return b.center;
@@ -430,20 +659,33 @@ public static class Case3CoverageGate
                              alphaPairs > 0 ? bestAbove * 100f : 100f, CoverThreshold * 100f);
     }
 
+    /// <summary>The whole page, entries and decor together, so the census can be read at a glance.</summary>
     static void Report(Case3Director director, string where)
     {
+        SpriteRenderer[] page = PageSprites();
         StringBuilder sb = new StringBuilder();
-        sb.AppendLine("[Case3Coverage] ---- " + where + " ----");
-        for (int i = 0; i < director.Count; i++)
+        sb.AppendLine("[Case3Coverage] ---- " + where + " ---- (" + director.Count + " collectible of " +
+                      page.Length + " drawn)");
+        System.Array.Sort(page, (a, b) => a.sortingOrder.CompareTo(b.sortingOrder));
+        foreach (SpriteRenderer sr in page)
         {
-            Case3Director.Entry e = director.entries[i];
-            if (e == null || e.sticker == null) continue;
+            int idx = -1;
+            for (int j = 0; j < director.Count; j++)
+                if (director.entries[j] != null && director.entries[j].sticker == sr) { idx = j; break; }
+
+            float cover = CoverageOf(sr, page) * 100f;
+            string mat = sr.sharedMaterial != null ? sr.sharedMaterial.name : "<none>";
+            if (idx < 0)
+            {
+                sb.AppendLine(string.Format("  {0,-22} order={1,4} covered={2,6:0.00}%  {3,-24} DECOR",
+                    sr.name, sr.sortingOrder, cover, mat));
+                continue;
+            }
+            Case3Director.Entry e = director.entries[idx];
             sb.AppendLine(string.Format(
-                "  {0,-16} order={1} drawn={2} covered={3:0.00}%  material={4}  playable={5} consumed={6}",
-                e.sticker.name, e.sticker.sortingOrder, e.sticker.enabled,
-                GateCoverage(director, i) * 100f,
-                e.sticker.sharedMaterial != null ? e.sticker.sharedMaterial.name : "<none>",
-                director.Playable(i), e.Consumed));
+                "  {0,-22} order={1,4} covered={2,6:0.00}%  {3,-24} \"{4}\" -> {5} card, playable={6} consumed={7}",
+                sr.name, sr.sortingOrder, cover, mat, director.NameOf(idx), e.key,
+                director.Playable(idx), e.Consumed));
         }
         Debug.Log(sb.ToString());
     }
