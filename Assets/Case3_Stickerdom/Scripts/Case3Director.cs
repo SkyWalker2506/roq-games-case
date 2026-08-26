@@ -131,13 +131,19 @@ namespace Case3
         [Tooltip("Reference: 0.35 s flight.")]
         public float flightDuration = 0.35f;
         [Tooltip("Flip back to the printed face. Timed against the reference at 0.12 s.")]
-        public float flipDuration = 0.12f;
-
         /// <summary>
-        /// How much curl is left when the sheet reaches its card. The rest of the unwind happens in
-        /// flight, so the landing is a press rather than a flip.
+        /// How long the sheet takes to unroll once it is sitting in its card.
+        ///
+        /// 0.30, not the 0.12 it was. At 0.12 the whole unroll happened inside three or four frames
+        /// and read as the sheet flipping over rather than as paper relaxing open - the owner's
+        /// "sanki flip oluyor gibi". His reference frames show a white rolled tube arriving intact
+        /// and opening in the slot, so the curl is right and only its pace was wrong.
         /// </summary>
-        const float FlightEndCurl = 0.14f;
+        /// NonSerialized: Stickerdom.unity carries flipDuration 0.12, and a serialized field is read
+        /// from the SCENE, not from this initialiser - so raising it here would have changed nothing
+        /// at all. Fourth time today that a scene value silently outranked source; the others were
+        /// Case 4's trail numbers, Case 2's shard scale and Case 3's counter requirement.
+        [System.NonSerialized] public float flipDuration = 0.30f;
         [Tooltip("Overshoot pop as the sticker meets the page.")]
         public float popDuration = 0.11f;
         [Tooltip("Ring-out after the pop; the reference never ends a sequence dead.")]
@@ -1215,17 +1221,15 @@ namespace Case3
                 // page items that are authored at an angle.
                 _stickerTf.rotation = Quaternion.Slerp(cur.HomeRotation, restRotation, e);
 
-                // OPEN ON THE WAY, do not flip on arrival.
+                // Curled and blank for the WHOLE flight - this is what the reference does, and the
+                // owner's own frames confirm it: a white rolled tube crosses the board and only
+                // unrolls once it is sitting in its card.
                 //
-                // This used to hold peelEnd (0.96) for the entire flight and then flatten in 0.12 s,
-                // which reads as the sheet snapping over at the last instant - the owner: "sanki flip
-                // oluyor gibi". A sticker is not flipped onto its page; it arrives already open and is
-                // pressed down.
-                //
-                // The unwind is front-loaded (k^0.6) so most of it happens while the sheet is still
-                // travelling and it is nearly flat well before it lands. A little curl is left for the
-                // press beat to take out, so the landing still has something to resolve.
-                peel.SetProgress(Mathf.Lerp(peelEnd, FlightEndCurl, Mathf.Pow(k, 0.6f)));
+                // I briefly unwound this in flight, reading "sanki flip oluyor gibi" as a complaint
+                // about arriving folded. It was not. The complaint was that the unroll IN THE SLOT was
+                // over in 0.12 s, which reads as a snap rather than as paper relaxing open. The curl
+                // stays; the unroll got the time instead.
+                peel.SetProgress(peelEnd);
 
                 Vector3 want = flight.Evaluate(drawnLaunch, restCentre, e);
                 PlaceDrawnAt(peel, want);
@@ -1237,7 +1241,7 @@ namespace Case3
 
             _stickerTf.localScale = flightEndScale;
             _stickerTf.rotation = restRotation;
-            peel.SetProgress(FlightEndCurl);
+            peel.SetProgress(peelEnd);
             PlaceDrawnAt(peel, restCentre);
             TraceMark("flight-end");
             EndStep();
@@ -1257,7 +1261,7 @@ namespace Case3
                 float k = Mathf.Clamp01((SequenceClock - _t0 - tFlight) / Mathf.Max(0.0001f, flipDuration));
                 float e = Ease.Evaluate(EaseType.OutCubic, k);
 
-                peel.SetProgress(Mathf.Lerp(FlightEndCurl, 0f, e));
+                peel.SetProgress(Mathf.Lerp(peelEnd, 0f, e));
                 // Press, not shrink: the sheet dips slightly under its settled size and comes back,
                 // which is what a thumb smoothing a sticker down looks like. The old lerp only ever
                 // approached 0.99 from above, so the beat had no contact in it.

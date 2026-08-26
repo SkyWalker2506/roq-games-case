@@ -15,11 +15,24 @@ namespace Case3
     public sealed class StickerFlight : MonoBehaviour
     {
         [Header("Path")]
+        // ZERO, and NonSerialized so the scene's 0.58 cannot bring the swing back.
+        //
+        // The owner: "aciliyor, sonra biraz saga sola gidiyor, ondan sonra yerine gidiyor... farkli
+        // yerlere gidip sonra birden isinlanma gibi bir sey oluyor". A 0.58-unit sideways bulge on a
+        // short hop is most of that: the sheet leaves the page heading somewhere other than its card,
+        // and the correction back onto the target at the end is what reads as a jump.
+        //
+        // He wants it to go for the target the moment it is peeled and settle there. A straight line
+        // does exactly that, and it costs nothing the reference has - its own landing was tracked
+        // frame by frame and showed no lateral correction at all, largest wobble 7.2 px on a 760 px
+        // chord.
         [Tooltip("How far the arc bulges sideways off the straight line, in world units.")]
-        public float arcBulge = 0.58f;
+        [System.NonSerialized] public float arcBulge = 0f;
 
+        // A little lift is kept: it is what stops the hop reading as a slide across a table, and it
+        // is along the travel direction rather than across it, so it does not send the sheet sideways.
         [Tooltip("Extra lift added at the top of the arc, in world units.")]
-        public float arcLift = 0.26f;
+        [System.NonSerialized] public float arcLift = 0.10f;
 
         [Header("Sparkle trail")]
         [Tooltip("VFX/SparklePop prefab; played repeatedly along the path.")]
