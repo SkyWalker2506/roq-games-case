@@ -382,7 +382,7 @@ namespace Case2
         // NonSerialized: every hole in the scene carries its own 0.21, which would override this.
         // Owner-directed deviation from the measured 200-230 ms - at the reference's speed the tiles
         // read as a flicker rather than as blocks arriving, so the arc is roughly doubled.
-        [System.NonSerialized] public float tileRiseDuration = 0.9f;
+        [System.NonSerialized] public float tileRiseDuration = 0.45f;
 
         [Tooltip("Fraction of the arc spent climbing to flush. Measured: cell (2,2) crossed the board "
             + "plane at f66 of a f63-f70 motion, so about half.")]
@@ -392,7 +392,7 @@ namespace Case2
             + "66-74 at 30 fps, i.e. 267 ms.")]
         /// <summary>Seconds the per-cell start times are spread over. 0.8: the arcs are 2 s now,
         /// and a 0.27 spread across a 2 s move is not a stagger, it is a rounding error.</summary>
-        [System.NonSerialized] public float tileRiseStagger = 0.12f;
+        [System.NonSerialized] public float tileRiseStagger = 0.06f;
 
         Transform[] _cellTiles;
         Vector3[] _cellTileHome;
