@@ -2,6 +2,15 @@ using UnityEngine;
 
 namespace Case3
 {
+    /// <summary>Where <see cref="StickerPeel"/> gets the direction its fold line travels in.</summary>
+    public enum PeelDirectionSource
+    {
+        /// <summary>From the peel origin the caller supplies - the tap point. What the reference does.</summary>
+        TapPoint = 0,
+        /// <summary>Always <see cref="StickerPeel.curlDirection"/>. The old fixed behaviour.</summary>
+        Authored = 1,
+    }
+
     /// <summary>
     /// Drives the page-curl peel of one sticker.
     ///
@@ -22,6 +31,16 @@ namespace Case3
         [Tooltip("The sticker that peels. Filled in by Case3SceneSetup.")]
         public SpriteRenderer sticker;
 
+        /// <summary>
+        /// Renderers that draw PART OF THE SAME PIECE OF PAPER as <see cref="sticker"/> and must
+        /// disappear with it the moment the curl mesh takes over.
+        ///
+        /// The page items are drawn as three stacked sprites - the art, a white die-cut rim under it,
+        /// and a soft drop shadow under that. Only the art becomes the curl mesh. Left alone, the rim
+        /// stays lying on the page as a white silhouette of a sticker that has already flown away.
+        /// </summary>
+        public SpriteRenderer[] companions;
+
         [Tooltip("Shared Case3/StickerCurl material. Per-sticker values are pushed with a property block.")]
         public Material curlMaterial;
 
@@ -32,14 +51,38 @@ namespace Case3
         [Tooltip("Sorting order added on top of the sticker's own, so the peeled sheet clears the page.")]
         public int sortingOrderBoost = 10;
 
-        [Header("Curl shape")]
+        [Header("Curl direction")]
+        [Tooltip("Where the curl direction comes from.\n\n" +
+                 "TapPoint (default, and what the reference does): the sheet lifts at the finger and the " +
+                 "fold travels away from it, so the direction is a continuous angle set by the player.\n\n" +
+                 "Authored: always use curlDirection, whatever the tap was. Reproduces the old fixed peel.")]
+        public PeelDirectionSource directionSource = PeelDirectionSource.TapPoint;
+
         [Tooltip("Direction the fold line travels in; the sticker lifts from the edge it points at. " +
-                 "Kept within a few degrees of an axis on purpose: at maxAngle = pi the peeled flap is a " +
-                 "MIRROR of the sheet about the fold line, and a mirror about a diagonal line rotates the " +
-                 "silhouette by twice that angle. The old (1, 0.45) fold turned the flying sticker 48 deg " +
-                 "off its own shape and blew its screen footprint up by ~1.6x. A 4 deg tilt keeps the " +
-                 "peel from looking mechanical while the silhouette stays the sticker's own.")]
+                 "Used verbatim when directionSource is Authored, and as the starting value otherwise. " +
+                 "\n\n" +
+                 "There is nothing special about an axis here. At maxAngle = pi the peeled flap is a MIRROR " +
+                 "of the sheet about the fold line, so an off-axis fold turns the flying silhouette; the " +
+                 "reference does exactly that (its cat peels at +20 deg and flies visibly turned). What " +
+                 "actually bit the old (1, 0.45) fold was the wrap angle, not the tilt: at 0.92*pi the " +
+                 "'mirror' is a shear and the flap slides outside the sprite. Measured on all three " +
+                 "stickers, a full 360 deg direction sweep at maxAngle = pi keeps the curl AABB inside " +
+                 "Case3SilhouetteGate.MaxRatio (1.35) on both axes - see the sweep logged in " +
+                 ".plan-build/cli/dir-sweep.txt.")]
         public Vector2 curlDirection = new Vector2(0.07f, 1f);
+
+        [Tooltip("How far off the sheet centre the peel origin has to be before it is allowed to set the " +
+                 "direction, as a fraction of the sheet's half-diagonal. A finger landing on the middle of " +
+                 "the sticker names no direction at all: the measurement on the reference's own cat peel, " +
+                 "whose tap sits 30 px from the centre, is 14 deg off its fitted fold angle, against 8-9 " +
+                 "deg for the two taps that land well off centre. Below this the fallback angle is used.")]
+        [Range(0f, 0.9f)] public float minOriginOffset = 0.18f;
+
+        [Tooltip("Direction used when nothing has tapped this sticker - a prewarm pass, or a scripted demo " +
+                 "peel. DEVIATION from the reference, which always has a finger: derived from the " +
+                 "sticker's name so each sheet keeps one fixed character and a page full of stickers peels " +
+                 "in visibly different directions instead of all sliding the same way.")]
+        public bool fallbackFromName = true;
 
         [Tooltip("Cylinder radius as a fraction of the sticker's longest side. Larger = looser roll.")]
         public float radiusFactor = 0.105f;
@@ -119,6 +162,9 @@ namespace Case3
         float _radius, _shadowWidth, _waveAmp, _waveFreq, _lead, _trail;
         Vector2 _dir = Vector2.up;
 
+        Vector2 _originLocal;
+        bool _hasOrigin;
+
         float _progress;
         float _alpha = 1f;
         bool _built;
@@ -138,6 +184,120 @@ namespace Case3
         /// <summary>Cylinder radius in the sticker's local units; useful for sizing the dust puff.</summary>
         public float CurlRadius { get { return _radius; } }
 
+        /// <summary>
+        /// The unit direction the fold line is actually travelling in, after the peel origin and the
+        /// fallback have had their say. This, not <see cref="curlDirection"/>, is what reaches
+        /// <c>_CurlDir</c> in the shader.
+        /// </summary>
+        public Vector2 EffectiveCurlDirection { get { return _dir; } }
+
+        /// <summary>True while a peel origin (a tap) has been supplied and not yet cleared.</summary>
+        public bool HasPeelOrigin { get { return _hasOrigin; } }
+
+        // ------------------------------------------------------------------ direction
+
+        /// <summary>
+        /// Tells the sheet where the finger landed, in world space. The sticker lifts AT that point and
+        /// the fold travels away from it, which is the rule the reference footage follows: in all three
+        /// of its peels the tap indicator sits at the far +dir end of the sweep (at the 93rd, 106th and
+        /// 138th percentile of the flap's own along-fold extent, where 100% is the edge the peel starts
+        /// from), and the fitted fold angles - +20, -28 and -86 deg on screen - agree with
+        /// normalize(tap - centre) to within 14, 9 and 8 deg.
+        ///
+        /// Safe before or after <see cref="Prepare"/>; the direction-dependent constants are recomputed
+        /// either way. Cleared by <see cref="ResetInstant"/> so a replay re-derives from the next tap.
+        /// </summary>
+        public void SetPeelOrigin(Vector3 worldPoint)
+        {
+            Transform t = sticker != null ? sticker.transform : transform;
+            Vector3 local = t.InverseTransformPoint(worldPoint);
+            _originLocal = new Vector2(local.x, local.y);
+            _hasOrigin = true;
+            if (_built)
+            {
+                ApplyDirection(ResolveDirection());
+                SetProgress(_progress);
+            }
+        }
+
+        /// <summary>Forgets the tap, so the next peel falls back to the per-sticker angle.</summary>
+        public void ClearPeelOrigin()
+        {
+            if (!_hasOrigin) return;
+            _hasOrigin = false;
+            if (_built)
+            {
+                ApplyDirection(ResolveDirection());
+                SetProgress(_progress);
+            }
+        }
+
+        /// <summary>
+        /// Picks the fold direction. A continuous angle in every branch - there are no four cases here,
+        /// so diagonals are ordinary values and not a special path.
+        /// </summary>
+        Vector2 ResolveDirection()
+        {
+            Vector2 authored = curlDirection.sqrMagnitude < 0.0001f ? Vector2.up : curlDirection.normalized;
+            if (directionSource == PeelDirectionSource.Authored) return authored;
+
+            if (_hasOrigin)
+            {
+                Vector2 centre = (_localMin + _localMax) * 0.5f;
+                Vector2 offset = _originLocal - centre;
+                float halfDiagonal = (_localMax - _localMin).magnitude * 0.5f;
+                // A finger on the middle of the sheet names no direction: the offset is short, so its
+                // angle is dominated by where inside a few pixels the tap landed. Measured on the
+                // reference's own cat peel - tap 30 px off centre - that costs 14 deg against 8-9 deg
+                // for the two taps that land well out. Below the threshold the sticker keeps its own angle.
+                if (halfDiagonal > 0.0001f && offset.magnitude >= minOriginOffset * halfDiagonal)
+                    return offset.normalized;
+            }
+
+            return fallbackFromName ? FallbackDirection() : authored;
+        }
+
+        /// <summary>
+        /// The angle a sticker peels at when nothing tapped it. DEVIATION from the reference, which
+        /// always has a finger; recorded rather than fitted. Derived from the sticker's name so it is
+        /// stable across runs and across replays, and so a page of stickers peels every which way
+        /// instead of all sliding the same direction.
+        /// </summary>
+        Vector2 FallbackDirection()
+        {
+            string key = sticker != null ? sticker.name : name;
+            unchecked
+            {
+                uint h = 2166136261u;
+                for (int i = 0; i < key.Length; i++) { h ^= key[i]; h *= 16777619u; }
+                h ^= h >> 15; h *= 0x2545F491u; h ^= h >> 13;
+                float angle = (h / 4294967296f) * 2f * Mathf.PI;
+                return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+            }
+        }
+
+        /// <summary>
+        /// Recomputes every constant that depends on which way the fold travels. Called from
+        /// <see cref="Prepare"/> and again whenever the peel origin changes, so a tap that arrives after
+        /// the mesh was built still steers the curl.
+        /// </summary>
+        void ApplyDirection(Vector2 dir)
+        {
+            _dir = dir;
+            StickerMeshBuilder.ProjectionRange(_localMin, _localMax, _dir, out _projMin, out _projMax);
+
+            Vector2 perp = new Vector2(-_dir.y, _dir.x);
+            float acrossMin, acrossMax;
+            StickerMeshBuilder.ProjectionRange(_localMin, _localMax, perp, out acrossMin, out acrossMax);
+            _acrossSpan = Mathf.Max(0.01f, acrossMax - acrossMin);
+            _waveFreq = waveCycles * 2f * Mathf.PI / _acrossSpan;
+
+            // Margins so that at progress 0 nothing (not even the cast shadow) has entered the sheet,
+            // and at progress 1 every vertex has cleared the arc and lies flat again, mirrored.
+            _lead = _shadowWidth + _waveAmp + _radius * 0.35f;
+            _trail = Mathf.PI * _radius + _waveAmp + (_projMax - _projMin) * 0.03f;
+        }
+
         // ------------------------------------------------------------------ setup
 
         /// <summary>
@@ -151,24 +311,14 @@ namespace Case3
             _mesh = StickerMeshBuilder.Build(sticker.sprite, segments, out _localMin, out _localMax);
             if (_mesh == null) return;
 
-            _dir = curlDirection.sqrMagnitude < 0.0001f ? Vector2.up : curlDirection.normalized;
-            StickerMeshBuilder.ProjectionRange(_localMin, _localMax, _dir, out _projMin, out _projMax);
-
-            Vector2 perp = new Vector2(-_dir.y, _dir.x);
-            float acrossMin, acrossMax;
-            StickerMeshBuilder.ProjectionRange(_localMin, _localMax, perp, out acrossMin, out acrossMax);
-            _acrossSpan = Mathf.Max(0.01f, acrossMax - acrossMin);
-
             Vector2 size = _localMax - _localMin;
             _radius = Mathf.Max(0.02f, radiusFactor * Mathf.Max(size.x, size.y));
             _shadowWidth = shadowWidthFactor * _radius;
             _waveAmp = waveFactor * _radius;
-            _waveFreq = waveCycles * 2f * Mathf.PI / _acrossSpan;
 
-            // Margins so that at progress 0 nothing (not even the cast shadow) has entered the sheet,
-            // and at progress 1 every vertex has cleared the arc and lies flat again, mirrored.
-            _lead = _shadowWidth + _waveAmp + _radius * 0.35f;
-            _trail = Mathf.PI * _radius + _waveAmp + (_projMax - _projMin) * 0.03f;
+            // Everything that depends on WHICH WAY the fold travels lives in one place, because it is no
+            // longer decided once at build time - a tap can change it after the mesh exists.
+            ApplyDirection(ResolveDirection());
 
             _meshGo = new GameObject("CurlMesh");
             _meshGo.hideFlags = HideFlags.DontSave;
@@ -215,6 +365,9 @@ namespace Case3
             _meshMode = on;
             _renderer.enabled = on;
             sticker.enabled = !on;
+            if (companions != null)
+                for (int i = 0; i < companions.Length; i++)
+                    if (companions[i] != null) companions[i].enabled = !on;
             ApplyPaperShadow();
         }
 
@@ -264,11 +417,25 @@ namespace Case3
             if (_built) SetProgress(_progress);
         }
 
+        /// <summary>
+        /// Shows or hides the rim/shadow sprites that belong to the same piece of paper. The peel
+        /// itself drives these, but the attach step needs them off for good once the card art has
+        /// taken over, and the reset needs them back on.
+        /// </summary>
+        public void SetCompanionsEnabled(bool on)
+        {
+            if (companions == null) return;
+            for (int i = 0; i < companions.Length; i++)
+                if (companions[i] != null) companions[i].enabled = on;
+        }
+
         /// <summary>Puts the sticker back to a flat sprite; the mesh object is kept for the next run.</summary>
         public void ResetInstant()
         {
             _alpha = 1f;
             _placed = false;
+            _hasOrigin = false;
+            if (_built) ApplyDirection(ResolveDirection());
             if (_built)
             {
                 SetProgress(0f);

@@ -109,10 +109,18 @@ namespace Case3
             mesh.RecalculateNormals();
             // The curl moves vertices a long way from the flat rect; a generous fixed bounds keeps the
             // sheet from being frustum-culled mid-peel.
+            //
+            // Sized off the DIAGONAL, not off x and y separately, because the fold direction is now a
+            // free angle. At maxAngle = pi the mirrored flap reaches about twice the sheet's extent
+            // ALONG THE FOLD past the starting edge, and along a diagonal that extent is |size|, not
+            // size.x - so the old size.x*3 box (half-extent 1.5*size.x) was short of the 1.5*|size| a
+            // 45 deg peel needs on a square sticker and could have culled the flap mid-flight. A cube of
+            // side 3*|size| covers every angle. Bounds only gate culling, so this cannot move a pixel of
+            // a sheet that was already being drawn.
             Vector2 centre = (localMin + localMax) * 0.5f;
             Vector2 size = localMax - localMin;
-            mesh.bounds = new Bounds(new Vector3(centre.x, centre.y, 0f),
-                                     new Vector3(size.x * 3f, size.y * 3f, size.magnitude * 3f));
+            float span = size.magnitude * 3f;
+            mesh.bounds = new Bounds(new Vector3(centre.x, centre.y, 0f), new Vector3(span, span, span));
             return mesh;
         }
 

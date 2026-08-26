@@ -1,5 +1,17 @@
 // Page-curl peel for a sticker, URP Unlit.
 //
+// _CurlDir is a FREE CONTINUOUS DIRECTION, not one of four cases. The vertex stage works entirely in the
+// (along, across) frame that _CurlDir defines - along = dot(p, dir), across = dot(p, perp) - and every
+// other term (the arc, the tangent run, the fold ripple, the cast shadow, the shading) is written in that
+// frame and never in x/y. So rotating _CurlDir rotates the frame and nothing else: the curl SHAPE is
+// invariant under the direction, and 37 deg is as ordinary a value as 90 deg. That invariant is what
+// StickerPeel leans on when it points the fold at the finger, and it is checked by rendering the peel
+// with the direction pinned back to the old constant and requiring the result to be byte-identical.
+//
+// Nothing here degenerates at an axis or at a diagonal. The one input the frame cannot survive is a ZERO
+// _CurlDir, whose normalize() is a NaN; StickerPeel guarantees a unit vector, which is why there is no
+// guard burned into the inner loop.
+//
 // The sheet is a flat grid mesh in local space. Everything on the +_CurlDir side of a moving fold line
 // wraps a cylinder of radius _CurlRadius; once it has wrapped _MaxAngle (pi by default) the rest of the
 // sheet continues along the tangent, which lays the peeled flap flat and mirrored with its white back
