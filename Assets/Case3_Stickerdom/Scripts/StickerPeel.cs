@@ -240,6 +240,25 @@ namespace Case3
             {
                 ApplyDirection(ResolveDirection());
                 SetProgress(_progress);
+
+                // The fold direction is derived from the tap and nothing else, so if a sheet peels the
+                // wrong way the disagreement has to be visible in these five numbers. Printed rather
+                // than guessed at: the owner reports PageObj_ramen_cup peels inward while its
+                // neighbours do not, and nothing in its transform is unusual - no mirrored scale, and
+                // a tilt (0.044 rad) that PageObj_teddy shares.
+                //
+                // What this can show that reasoning could not: whether NEAREST CORNER is the corner
+                // under the finger. The corners come from the sprite's mesh RECT, and art that does
+                // not fill its rect puts the geometric corner somewhere the player never sees - so a
+                // tap near the drawn cup can snap to the far corner and hinge on the wrong side.
+                Vector2 corner = NearestCornerLocal(_originLocal);
+                Debug.Log(string.Format(
+                    "[Case3Peel] PEEL_DIR {0}: tap_local ({1:0.00}, {2:0.00}) rect ({3:0.00},{4:0.00})..({5:0.00},{6:0.00}) " +
+                    "corner ({7:0.00}, {8:0.00}) dir ({9:0.00}, {10:0.00}) pivot_local ({11:0.00}, {12:0.00})",
+                    sticker != null ? sticker.name : name,
+                    _originLocal.x, _originLocal.y,
+                    _localMin.x, _localMin.y, _localMax.x, _localMax.y,
+                    corner.x, corner.y, _dir.x, _dir.y, _pivotLocal.x, _pivotLocal.y));
             }
         }
 
