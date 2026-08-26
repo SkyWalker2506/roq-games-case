@@ -58,7 +58,7 @@ namespace Case2
         /// total wait before anything breaks is much longer and the pause at the bottom reads as a
         /// stall. "yerlestikten sonra shatter olmasi daha hizli olsun, cok bekliyorsun."
         /// </summary>
-        public const float DwellSecondsFixed = 0.08f;
+        public const float DwellSecondsFixed = 0.035f;
         public float anticipationDuration = 0.95f;
         public float shatterDuration = 0.35f;
         public float sinkDuration = 0.35f;

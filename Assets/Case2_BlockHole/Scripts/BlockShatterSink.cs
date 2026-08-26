@@ -46,7 +46,12 @@ namespace Case2
         public float outwardSpeed = 1.45f;
 
         [Tooltip("Gravity applied to the shards while they fall.")]
-        public float gravity = 6.4f;
+        // NonSerialized on purpose. The scene carries its own gravity (6.5), shardScale (1.05) and
+        // outwardSpeed (1.8), and a serialized field is read from the SCENE, not from this
+        // initialiser - so editing these values here did nothing at all until they stopped being
+        // serialized. That exact trap cost three rounds on Case 4's trail before it was spotted.
+        // The scene's keys stay in the YAML harmlessly; Unity ignores them.
+        [System.NonSerialized] public float gravity = 3.4f;
 
         [Tooltip("How hard the hole pulls the shards back over its mouth as they drop.")]
         public float funnelRate = 4.2f;
@@ -71,7 +76,7 @@ namespace Case2
         [Tooltip("Every shard is blown up by this much. A 1-unit block split 57 ways gives crumbs the " +
                  "size of a few screen pixels; the reference break throws chunks that read as glass. " +
                  "Volume conservation is not the goal, legibility is.")]
-        public float shardScale = 0.88f;
+        [System.NonSerialized] public float shardScale = 1.45f;
 
         [Tooltip("How far towards white a shard is pushed off the block colour, so it reads as glass " +
                  "rather than as a chip of painted plastic.")]

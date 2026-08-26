@@ -372,7 +372,10 @@ namespace Case2
 
         [Tooltip("Seconds for the whole arc: up from tileRiseDepth to flush, past it by "
             + "tileRiseHeight, and back. Measured 200-230 ms on cell (2,2) (f63 deep -> f70 flush).")]
-        public float tileRiseDuration = 0.21f;
+        // NonSerialized: every hole in the scene carries its own 0.21, which would override this.
+        // Owner-directed deviation from the measured 200-230 ms - at the reference's speed the tiles
+        // read as a flicker rather than as blocks arriving, so the arc is roughly doubled.
+        [System.NonSerialized] public float tileRiseDuration = 0.45f;
 
         [Tooltip("Fraction of the arc spent climbing to flush. Measured: cell (2,2) crossed the board "
             + "plane at f66 of a f63-f70 motion, so about half.")]
