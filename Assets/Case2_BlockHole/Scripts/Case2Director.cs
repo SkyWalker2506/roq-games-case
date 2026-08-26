@@ -380,7 +380,12 @@ namespace Case2
             // 0.27 s of stagger plus a 0.45 s arc against a close of closeDuration. Releasing the
             // hole at tClose therefore still let go while tiles were mid-air, which is the owner's
             // "hepsi bitmeden yine kayboluyor". Take the moment the board is genuinely flush.
-            float tTilesFlush = SequenceTime + hole.RiseTotalSeconds;
+            // Time.time, NOT SequenceTime. SequenceTime is `IsPlaying || completed ? clock : 0f`, and
+            // the user-drop path runs with the director stopped - so it reads a constant 0 there and
+            // the wait below could never end. That hung UserTail, left _userTailRunning set, and
+            // HandleUserDrop rejects every later drop while it is: the first block worked and the
+            // second did nothing at all. A deadline needs a clock that runs in both paths.
+            float tTilesFlush = Time.time + hole.RiseTotalSeconds;
             hole.FlashSeal(closeDuration * 0.75f);
             Squash.Bump(hole.transform, 0.05f, closeDuration);
             // No second smoke burst on close. The reference keeps the eye on the coloured fragments
@@ -393,7 +398,7 @@ namespace Case2
             // lip/cavity tint (Spend). Either one on its own leaves the other still announcing a
             // hole that is no longer there, or - as it did - kills the outline while the board is
             // still on its way back.
-            while (SequenceTime < tTilesFlush) yield return null;
+            while (Time.time < tTilesFlush) yield return null;
             hole.SetLit(false);
             hole.Spend(spentFadeDuration);
             if (record) EndStep();
