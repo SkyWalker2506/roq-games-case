@@ -311,23 +311,31 @@ public static class Case3PageEntries
         peel.sticker = sr;
         peel.curlMaterial = curl;
 
-        // The peel finds the contact shadow by the "Shadow_" prefix. The page items call theirs
-        // "Drop"; renaming is what lets one peel driver serve both the strip and the page. The white
-        // die-cut rim is the same piece of paper as the art, so it is handed to the peel as a
-        // companion and vanishes with it - otherwise it stays lying on the page as a white
+        // Contact-shadow children are DESTROYED, not renamed.
+        //
+        // The rename is what bred them: this pass turned "Drop" into "Shadow_<name>", so the rim pass
+        // that authored "Drop" no longer recognised its own work and made a fresh one every cycle.
+        // A flat quad cannot follow a curling sheet anyway - the curl shader does the darkening.
+        //
+        // The white die-cut rim is the same piece of paper as the art, so it is handed to the peel as
+        // a companion and vanishes with it - otherwise it stays lying on the page as a white
         // silhouette of a sticker that has already flown away.
         List<SpriteRenderer> companions = new List<SpriteRenderer>();
-        foreach (Transform child in sr.transform)
+        int killed = 0;
+        for (int i = sr.transform.childCount - 1; i >= 0; i--)
         {
+            Transform child = sr.transform.GetChild(i);
             SpriteRenderer cs = child.GetComponent<SpriteRenderer>();
             if (cs == null) continue;
-            if (child.name == "Drop")
+            if (child.name == "Drop" ||
+                child.name.StartsWith(StickerPeel.PaperShadowPrefix, System.StringComparison.Ordinal))
             {
-                child.name = StickerPeel.PaperShadowPrefix + sr.name;
-                log.AppendLine("  SHADOW " + sr.name + ": Drop -> " + child.name);
+                Undo.DestroyObjectImmediate(child.gameObject);
+                killed++;
             }
             else if (child.name == "Rim") companions.Add(cs);
         }
+        if (killed > 0) log.AppendLine("  SHADOW " + sr.name + ": destroyed " + killed + " contact-shadow sprite(s)");
         peel.companions = companions.ToArray();
         EditorUtility.SetDirty(peel);
 

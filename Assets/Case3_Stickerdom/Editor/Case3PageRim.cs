@@ -38,6 +38,23 @@ namespace Case3.EditorTools
         const string RimChild = "Rim";
         const string DropChild = "Drop";
 
+        /// <summary>
+        /// Removes any authored contact-shadow child, however many previous runs left behind and
+        /// whichever of the two names they ended up under.
+        /// </summary>
+        static void PurgeShadowChildren(GameObject obj)
+        {
+            if (obj == null) return;
+            for (int i = obj.transform.childCount - 1; i >= 0; i--)
+            {
+                Transform c = obj.transform.GetChild(i);
+                if (c.name != DropChild &&
+                    !c.name.StartsWith(StickerPeel.PaperShadowPrefix, System.StringComparison.Ordinal))
+                    continue;
+                Undo.DestroyObjectImmediate(c.gameObject);
+            }
+        }
+
         // MEASURED, not chosen. tools/case3_rim_metrics.py casts rays off the f=0.5 level set of
         // the sticker/paper boundary and reads the white band's width along the normal. On the
         // reference frame the three bright stickers pool at W = 8.50 render px on a 1080-wide
@@ -143,7 +160,13 @@ namespace Case3.EditorTools
                     0f);
 
                 EnsureLayer(obj, RimChild, rimMat, order - 1, Vector3.zero, Color.white);
-                EnsureLayer(obj, DropChild, dropMat, order - 2, dropLocal, DropColor);
+                // NO drop-shadow layer. It used to be authored here as a "Drop" child, and
+                // Case3PageEntries then RENAMED it to "Shadow_<name>" so StickerPeel could find it by
+                // prefix. Which meant the next run of this pass looked for "Drop", did not find it,
+                // and made another one. Six setup cycles, six shadow sprites per sheet, 59 in the
+                // scene - and StickerPeel only ever hid the first. The shading is the curl shader's
+                // job now, so there is nothing here to leave behind.
+                PurgeShadowChildren(obj);
 
                 sb.Append(obj.name).Append("=").Append(order).Append(' ');
             }

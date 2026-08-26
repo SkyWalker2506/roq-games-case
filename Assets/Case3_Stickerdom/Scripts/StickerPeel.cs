@@ -672,8 +672,21 @@ namespace Case3
             {
                 Transform c = st.GetChild(i);
                 if (!c.name.StartsWith(PaperShadowPrefix, System.StringComparison.Ordinal)) continue;
-                if (Application.isPlaying) Destroy(c.gameObject);
-                else                       DestroyImmediate(c.gameObject);
+
+                if (Application.isPlaying) { Destroy(c.gameObject); continue; }
+
+                // Edit mode. DestroyImmediate is ILLEGAL from OnValidate - which is exactly where the
+                // manualPeel slider calls Prepare from - and Unity says so once per sheet per drag.
+                // Hide it now so the frame is already correct, and delete it on the next editor tick,
+                // when destroying is allowed again.
+                c.gameObject.SetActive(false);
+#if UNITY_EDITOR
+                GameObject doomed = c.gameObject;
+                UnityEditor.EditorApplication.delayCall += () =>
+                {
+                    if (doomed != null) DestroyImmediate(doomed);
+                };
+#endif
             }
             _paperShadow = null;
             _shadowResolved = true;
