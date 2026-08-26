@@ -282,6 +282,47 @@ namespace Case3
         /// Picks the fold direction. A continuous angle in every branch - there are no four cases here,
         /// so diagonals are ordinary values and not a special path.
         /// </summary>
+        /// <summary>
+        /// Which of the sheet's four corners the finger is closest to, in local space.
+        ///
+        /// The hinge of a peel is a corner, not a point on a line through the middle. Taking the
+        /// nearest one means the pivot is stable under a shaky tap - move the finger a few pixels and
+        /// the corner does not change - and it can never degenerate to the centre.
+        /// </summary>
+        Vector2 NearestCornerLocal(Vector2 p)
+        {
+            Vector2 best = _localMin;
+            float bestD = float.MaxValue;
+            for (int i = 0; i < 4; i++)
+            {
+                Vector2 c = new Vector2((i & 1) == 0 ? _localMin.x : _localMax.x,
+                                        (i & 2) == 0 ? _localMin.y : _localMax.y);
+                float d = (p - c).sqrMagnitude;
+                if (d < bestD) { bestD = d; best = c; }
+            }
+            return best;
+        }
+
+        [Header("Manual preview")]
+        [Tooltip("Drag this in the Inspector to scrub the peel by hand. 0 = flat, front face showing. " +
+                 "1 = fully curled from the pivot corner. Editor-only; the sequence overwrites it at runtime.")]
+        [Range(0f, 1f)] public float manualPeel;
+
+        /// <summary>
+        /// Applies <see cref="manualPeel"/> the moment it is dragged in the Inspector, so the curl can
+        /// be dialled in by eye without entering Play mode. Does nothing while the game is running -
+        /// the sequence owns the progress then.
+        /// </summary>
+        void OnValidate()
+        {
+            if (Application.isPlaying) return;
+            if (sticker == null || sticker.sprite == null) return;
+            Prepare();
+            if (!_built) return;
+            SetMeshMode(manualPeel > 0.0001f);
+            SetProgress(manualPeel);
+        }
+
         Vector2 ResolveDirection()
         {
             Vector2 authored = curlDirection.sqrMagnitude < 0.0001f ? Vector2.up : curlDirection.normalized;
@@ -289,15 +330,17 @@ namespace Case3
 
             if (_hasOrigin)
             {
-                Vector2 centre = (_localMin + _localMax) * 0.5f;
-                Vector2 offset = _originLocal - centre;
-                float halfDiagonal = (_localMax - _localMin).magnitude * 0.5f;
-                // A finger on the middle of the sheet names no direction: the offset is short, so its
-                // angle is dominated by where inside a few pixels the tap landed. Measured on the
-                // reference's own cat peel - tap 30 px off centre - that costs 14 deg against 8-9 deg
-                // for the two taps that land well out. Below the threshold the sticker keeps its own angle.
-                if (halfDiagonal > 0.0001f && offset.magnitude >= minOriginOffset * halfDiagonal)
-                    return offset.normalized;
+                // THE PIVOT IS A CORNER. Always one of the four, never the middle and never a point
+                // that depends on how far off centre the finger landed.
+                //
+                // The old rule took the direction straight from (tap - centre), so a tap near the
+                // middle produced a near-zero vector whose angle was decided by a few pixels of noise,
+                // and `minOriginOffset` existed only to suppress that. Snapping to the nearest corner
+                // removes the failure instead of thresholding it: every tap names a corner, the corner
+                // is the hinge, and the fold runs from it across the sheet to the far corner.
+                Vector2 corner = NearestCornerLocal(_originLocal);
+                Vector2 away = ((_localMin + _localMax) * 0.5f) - corner;   // corner -> centre
+                if (away.sqrMagnitude > 1e-8f) return away.normalized;
             }
 
             return fallbackFromName ? FallbackDirection() : authored;
