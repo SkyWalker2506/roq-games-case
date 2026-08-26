@@ -382,7 +382,7 @@ namespace Case2
         // NonSerialized: every hole in the scene carries its own 0.21, which would override this.
         // Owner-directed deviation from the measured 200-230 ms - at the reference's speed the tiles
         // read as a flicker rather than as blocks arriving, so the arc is roughly doubled.
-        [System.NonSerialized] public float tileRiseDuration = 0.45f;
+        [System.NonSerialized] public float tileRiseDuration = 0.9f;
 
         [Tooltip("Fraction of the arc spent climbing to flush. Measured: cell (2,2) crossed the board "
             + "plane at f66 of a f63-f70 motion, so about half.")]
@@ -392,7 +392,7 @@ namespace Case2
             + "66-74 at 30 fps, i.e. 267 ms.")]
         /// <summary>Seconds the per-cell start times are spread over. 0.8: the arcs are 2 s now,
         /// and a 0.27 spread across a 2 s move is not a stagger, it is a rounding error.</summary>
-        [System.NonSerialized] public float tileRiseStagger = 0.06f;
+        [System.NonSerialized] public float tileRiseStagger = 0.12f;
 
         Transform[] _cellTiles;
         Vector3[] _cellTileHome;
@@ -600,12 +600,25 @@ namespace Case2
             if (r == null) return;
             if (_tileMpb == null) _tileMpb = new MaterialPropertyBlock();
             r.GetPropertyBlock(_tileMpb);
-            _tileMpb.SetFloat(ClipMinYId, clipped ? TrayFloorY : -1000f);
+            // In flight the clip is LOWERED, not removed.
+            //
+            // Removing it let the whole 3-unit body draw, and on the board's bottom row there is
+            // nothing under the board to hide it - the camera looks straight in past the front edge,
+            // which is the "+" cell the owner can see through. Lowering it to FlightClipY keeps the
+            // emergence visible (the tile appears as it crosses that plane and climbs the full 2
+            // units above) while nothing is ever drawn deep enough to clear the bottom rail.
+            _tileMpb.SetFloat(ClipMinYId, clipped ? TrayFloorY : FlightClipY);
             r.SetPropertyBlock(_tileMpb);
         }
 
         /// <summary>World height of the tray floor: the frame's own underside.</summary>
         public const float TrayFloorY = -0.02f;
+
+        /// <summary>
+        /// Clip height for a tile IN FLIGHT. Deep enough that the tile is seen coming up out of the
+        /// opening, shallow enough that the bottom rail still covers it from the front.
+        /// </summary>
+        public const float FlightClipY = -0.9f;
 
         void SetTileVisible(int i, bool visible)
         {
