@@ -370,9 +370,30 @@ namespace Case3
         /// <see cref="Prepare"/> and again whenever the peel origin changes, so a tap that arrives after
         /// the mesh was built still steers the curl.
         /// </summary>
+        /// <summary>The hinge corner, in the sheet's local space. Fixed for the whole peel.</summary>
+        Vector2 _pivotLocal;
+
+        /// <summary>
+        /// Where the hinge corner is actually DRAWN, in world space.
+        ///
+        /// Not the same as the corner's transform position: StickerPeel offsets the curl mesh by its
+        /// centroid compensation as the roll grows, so a corner that is mathematically fixed still
+        /// slides across the screen. This is the point the director pins to keep the pivot still -
+        /// the owner: "o pin noktasi konum degismemeli, sadece ust kisim kivrilmali".
+        /// </summary>
+        public Vector3 PivotWorld()
+        {
+            Transform basis = _meshTf != null ? _meshTf : (sticker != null ? sticker.transform : transform);
+            return basis.TransformPoint(new Vector3(_pivotLocal.x, _pivotLocal.y, 0f));
+        }
+
         void ApplyDirection(Vector2 dir)
         {
             _dir = dir;
+            // The hinge is the corner the fold runs AWAY from, i.e. the one at the minimum projection.
+            _pivotLocal = new Vector2(
+                Vector2.Dot(new Vector2(_localMin.x, _localMin.y), dir) <= Vector2.Dot(new Vector2(_localMax.x, _localMin.y), dir) ? _localMin.x : _localMax.x,
+                Vector2.Dot(new Vector2(_localMin.x, _localMin.y), dir) <= Vector2.Dot(new Vector2(_localMin.x, _localMax.y), dir) ? _localMin.y : _localMax.y);
             StickerMeshBuilder.ProjectionRange(_localMin, _localMax, _dir, out _projMin, out _projMax);
 
             Vector2 perp = new Vector2(-_dir.y, _dir.x);
@@ -618,6 +639,18 @@ namespace Case3
         {
             SpriteRenderer sr = PaperShadow();
             if (sr == null) return;
+
+            // The contact shadow is a separate SPRITE laid under the sheet, and the owner does not want
+            // one: "golge sanirim bu karanlik olsun diye katman koyuyorsun o - oyle yapma, direk shader
+            // ile karart". A quad cannot follow a curling sheet, so it reads as a grey blob sitting
+            // beside the paper rather than as shading on it. The curl shader already darkens the fold
+            // (_ShadowStrength, _ShadeFloor, _BackAO) and now does it much harder.
+            //
+            // Kept as a component rather than deleted so the scene's wiring stays valid; it simply
+            // never draws.
+            sr.enabled = false;
+            return;
+#pragma warning disable 0162
             if (_shadowSuppressed) { sr.enabled = false; return; }
 
             float k = _placed ? 1f : Mathf.Clamp01(_progress / ShadowFadeProgress);
@@ -627,6 +660,7 @@ namespace Case3
             Color c = _shadowHomeColor;
             c.a = a;
             sr.color = c;
+#pragma warning restore 0162
         }
 
         /// <summary>

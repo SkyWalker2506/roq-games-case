@@ -39,9 +39,9 @@ Shader "Case3/StickerCurl"
         _WaveFreq ("Fold Wave Frequency", Float) = 2.0
         _WavePhase ("Fold Wave Phase", Float) = 0.0
         _ShadowWidth ("Fold Shadow Width", Float) = 0.35
-        _ShadowStrength ("Fold Shadow Strength", Range(0,1)) = 0.45
-        _ShadeFloor ("Curl Shading Floor", Range(0,1)) = 0.55
-        _BackAO ("Curl Inner Darkening", Range(0,1)) = 0.45
+        _ShadowStrength ("Fold Shadow Strength", Range(0,1)) = 0.85
+        _ShadeFloor ("Curl Shading Floor", Range(0,1)) = 0.22
+        _BackAO ("Curl Inner Darkening", Range(0,1)) = 0.75
         _CreaseHighlight ("Crease Highlight", Range(0,1)) = 0.18
         _Alpha ("Alpha", Range(0,1)) = 1
     }

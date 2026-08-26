@@ -127,9 +127,9 @@ namespace Case3
         [Tooltip("Tap wind-up before the corner lifts. Reference: tap -> peel start = 0.05 s.")]
         public float tapDuration = 0.05f;
         [Tooltip("Reference: 0.30 s curl.")]
-        public float peelDuration = 0.30f;
+        [System.NonSerialized] public float peelDuration = 0.5f;    // owner: "oyunda da .5 saniyede peel yap"
         [Tooltip("Reference: 0.35 s flight.")]
-        public float flightDuration = 0.35f;
+        [System.NonSerialized] public float flightDuration = 0.5f;   // owner: "yerine koyarken de .5 saniyede"
         [Tooltip("Flip back to the printed face. Timed against the reference at 0.12 s.")]
         /// <summary>
         /// How long the sheet takes to unroll once it is sitting in its card.
@@ -1177,7 +1177,7 @@ namespace Case3
             // forbidding the centre to move leaves rotation as the only thing left for it to do.
             // Hold the edge and the middle is free to come with the roll, which is what paper does.
             Vector3 drawnHome = peel.VisualWorldCentre(9);
-            Vector3 peelEdgeHome = peel.AnchoredEdgeWorld();
+            Vector3 peelPivotHome = peel.PivotWorld();
 
             // LIFT THE SHEET ABOVE THE PAGE BEFORE IT PEELS, not when it flies.
             //
@@ -1211,10 +1211,15 @@ namespace Case3
                 // units on the cat - so the transform sat still and the sheet wandered off ("random
                 // bir yere giderek aciliyor"). Pinning the centre fixes that but buys the other
                 // complaint, rotation in place. Pinning the edge fixes both.
+                // Hold the HINGE CORNER exactly where it started. The AABB edge I pinned before is
+                // not the hinge - it is the outer bound of the curl, which grows as the roll does, so
+                // the "fixed" point crept down the sheet. The corner is a fixed local point; pinning
+                // its drawn position cancels the mesh's centroid compensation and nothing but the
+                // authored lift moves it.
                 Vector3 lift = new Vector3(0f, peelLift * e, -0.05f * e);
-                Vector3 edgeNowP = peel.AnchoredEdgeWorld();
+                Vector3 pivotNow = peel.PivotWorld();
                 Vector3 centreNowP = peel.VisualWorldCentre(9);
-                PlaceDrawnAt(peel, centreNowP + (peelEdgeHome + lift - edgeNowP));
+                PlaceDrawnAt(peel, centreNowP + (peelPivotHome + lift - pivotNow));
 
                 // Two-layer rule from .plan-build/audio.md: main hit, second accent 0.10-0.14 s later.
                 if (!secondPeelLayer && SequenceClock - _t0 >= tTap + 0.10f)
@@ -1232,9 +1237,9 @@ namespace Case3
             // The flight starts from wherever holding the edge has left the paper - read it, do not
             // assume it, because the centre has legitimately travelled during the roll.
             Vector3 endLift = new Vector3(0f, peelLift, -0.05f);
-            Vector3 edgeEnd = peel.AnchoredEdgeWorld();
+            Vector3 pivotEnd = peel.PivotWorld();
             Vector3 centreEnd = peel.VisualWorldCentre(9);
-            PlaceDrawnAt(peel, centreEnd + (peelEdgeHome + endLift - edgeEnd));
+            PlaceDrawnAt(peel, centreEnd + (peelPivotHome + endLift - pivotEnd));
             Vector3 drawnLaunch = peel.VisualWorldCentre(9);
             drawnLaunch.z = drawnHome.z + endLift.z;
 
