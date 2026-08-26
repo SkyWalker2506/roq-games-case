@@ -311,15 +311,26 @@ Shader "Case2/HoleDepthGradient"
                 float d = GetShapeSDF(p, shapeType);
                 float dOut = GetOuterSDF(p, shapeType);
 
-                // Sealing. The reference's target hole is GONE by 2.40s - the tiles are back and
-                // only a couple of stray shards remain - but ClosePit had no visual effect at all
-                // here: the plate's scale ignored _pitOpen, so the hole stayed open forever.
-                // Eroding the distance field shrinks the opening shut from its whole outline.
-                d += (1.0 - _Open) * _CloseErode;
-                // The same erosion on the exact field, so a sealing hole cannot grow a halo where
-                // its opening has just closed. _Open is 1 for the whole approach, so this is a
-                // no-op everywhere the closure invariant is measured.
-                dOut += (1.0 - _Open) * _CloseErode;
+                // SEALING IS A FILL, NOT AN EROSION.
+                //
+                // "bizde o bosluk kuculuyor, kayboluyor gibi... o bosluklar doluyormus efekti
+                // olmasi lazim" - ours reads as the opening shrinking away; it should read as the
+                // opening being FILLED from underneath.
+                //
+                // The two lines that used to be here did `d += (1 - _Open) * _CloseErode`, which
+                // eats the distance field inward from the whole outline - the aperture literally
+                // closes like an iris. MEASURED on the reference's purple cross, thresholding the
+                // open pit inside the cross footprint frame by frame from f130 to f174: the dark
+                // area falls from 100% to 6.8% while the bounding box of that dark region holds at
+                // 2.99 x 2.99 cells for EVERY ONE of those frames. The outline never moves. The
+                // hole keeps its size and shape and stops being dark - which is what filling looks
+                // like and what eroding cannot look like.
+                //
+                // So the outline is now left alone, and _Open drives the cavity's DEPTH and colour
+                // instead: the walls shorten and the interior rises to the board tone, so the cell
+                // reads as material arriving from below rather than as an aperture stopping down.
+                // The risen board tiles land on top of that, and the two beats agree.
+                float fillT = saturate(1.0 - _Open);
 
                 // Discard everything past the outer ring so the board shows through - except
                 // while this hole is the target, when the plate has to reach far enough out to
@@ -363,9 +374,9 @@ Shader "Case2/HoleDepthGradient"
                 [unroll]
                 for (int i = 0; i < 8; i++)
                 {
-                    float t = (float(i) + 0.5) / 8.0 * _WallHeight;
+                    float t = (float(i) + 0.5) / 8.0 * (_WallHeight * (1.0 - fillT));
                     float outside = step(0.0, GetShapeSDF(p + float2(0.0, t), shapeType));
-                    wallMask = max(wallMask, outside * (1.0 - t / _WallHeight));
+                    wallMask = max(wallMask, outside * (1.0 - t / max(_WallHeight, 1e-4)));
                 }
                 wallMask = pow(saturate(wallMask), 0.6);
 
@@ -392,6 +403,12 @@ Shader "Case2/HoleDepthGradient"
 
                 float outT = smoothstep(_LipOuter, _LipOuter + _LipFade, d);
                 col = lerp(col, _BoardTint.rgb, outT);
+
+                // The fill itself. Strictly INSIDE the opening, so the lip and the board around it
+                // are untouched and the outline stays exactly where it was on the frame the fill
+                // started - the invariant the reference holds to within a pixel.
+                float interior = 1.0 - smoothstep(-0.02, 0.02, d);
+                col = lerp(col, _BoardTint.rgb, fillT * interior);
 
                 // --- target halo, OUTSIDE the mouth only.
                 // Saturated out to _GlowCore, then a smoothstep to nothing at _GlowReach; see the

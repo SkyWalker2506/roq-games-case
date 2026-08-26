@@ -445,6 +445,37 @@ namespace Case2
                 }
             _cellTiles = tiles.ToArray();
             _cellTileHome = homes.ToArray();
+            _cellTileRenderers = new Renderer[_cellTiles.Length];
+            for (int i = 0; i < _cellTiles.Length; i++)
+                _cellTileRenderers[i] = _cellTiles[i] != null ? _cellTiles[i].GetComponentInChildren<Renderer>(true) : null;
+        }
+
+        Renderer[] _cellTileRenderers;
+
+        /// <summary>
+        /// A rising tile is drawn only once it has reached the board plane; below it, what the
+        /// player sees rising is the pit plate's own fill, which is clipped to the opening's SDF.
+        /// <para>
+        /// "o bosluktan geliyormus gibi degil de baska bir yerden geliyormus gibi gozukuyor" - the
+        /// cube was showing through the board wherever the opening is narrower than the cube, which
+        /// for a cross or an L is most of its perimeter. The rule is: clipped below the surface,
+        /// free above it - "son uzerine cikinca boslugu gecebilir".
+        /// </para>
+        /// <para>
+        /// The clip is done by the APERTURE rather than by the cube because the board tile's
+        /// material and shader belong to another workstream this session. The pit plate already
+        /// clips every pixel it draws to the hole's exact distance field - including the cross's
+        /// notches, which is the geometry that defeats anything bounds-based - so the sub-surface
+        /// part of the rise is carried there and the cube itself is simply not drawn until it is
+        /// legitimately above the board. Reported as a substitution, not presented as a clip of
+        /// the cube's own mesh.
+        /// </para>
+        /// </summary>
+        void SetTileVisible(int i, bool visible)
+        {
+            if (_cellTileRenderers == null || i >= _cellTileRenderers.Length) return;
+            Renderer r = _cellTileRenderers[i];
+            if (r != null && r.enabled != visible) r.enabled = visible;
         }
 
         /// <summary>Half the widest side of this opening, world units. Read by the gate.</summary>
@@ -538,6 +569,9 @@ namespace Case2
             _riseRoutines.Clear();
 
             if (_cellTiles == null) return;
+            // A rise cancelled mid-arc must not leave a tile switched off - that would be a hole in
+            // the board that no pit-open check could see.
+            for (int i = 0; i < _cellTiles.Length; i++) SetTileVisible(i, true);
             for (int i = 0; i < _cellTiles.Length; i++)
                 if (_cellTiles[i] != null) _cellTiles[i].position = _cellTileHome[i];
         }
@@ -549,6 +583,7 @@ namespace Case2
             // Drop it into the pit for the whole stagger delay, so it is genuinely waiting down
             // there when its turn comes rather than appearing at depth on its first moving frame.
             if (t != null) t.position = new Vector3(home.x, home.y + RiseCurve(0f), home.z);
+            SetTileVisible(i, false);           // waiting ~5 units down inside the pit
             float end = Time.time + delay;
             while (Time.time < end) yield return null;
 
@@ -560,9 +595,14 @@ namespace Case2
                 if (k >= 1f) break;
                 float h = RiseCurve(k);
                 if (t != null) t.position = new Vector3(home.x, home.y + h, home.z);
+                // Clipped below, free above. The cube appears the moment it reaches the board
+                // plane and may exceed the opening freely from there - which is the overshoot the
+                // reference plays and the owner explicitly allows.
+                SetTileVisible(i, h >= -0.001f);
                 yield return null;
             }
             if (t != null) t.position = home;      // exact, not recomputed
+            SetTileVisible(i, true);
         }
 
         /// <summary>
