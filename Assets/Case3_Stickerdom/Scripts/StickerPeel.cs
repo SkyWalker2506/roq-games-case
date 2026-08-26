@@ -220,6 +220,18 @@ namespace Case3
             }
         }
 
+        /// <summary>
+        /// Points the curl mesh at whatever sorting the sticker is wearing right now, plus its boost.
+        /// Cheap enough to call on every state change; the alternative is a value that is correct only
+        /// for the frame it was baked on.
+        /// </summary>
+        public void SyncMeshSorting()
+        {
+            if (_renderer == null || sticker == null) return;
+            _renderer.sortingLayerID = sticker.sortingLayerID;
+            _renderer.sortingOrder = sticker.sortingOrder + sortingOrderBoost;
+        }
+
         /// <summary>Forgets the tap, so the next peel falls back to the per-sticker angle.</summary>
         public void ClearPeelOrigin()
         {
@@ -364,6 +376,12 @@ namespace Case3
 
             _meshMode = on;
             _renderer.enabled = on;
+            // Re-read the sticker's order EVERY time the mesh is shown, not once in Prepare(). Prepare
+            // runs at prewarm, when the sheet still carries its page order (140 / 502 / 505); the
+            // director then lifts the sticker above the album for the flight, but the curl mesh - which
+            // is the thing actually on screen while it flies - kept the low number it was built with and
+            // slid UNDER the objects it passed over.
+            SyncMeshSorting();
             sticker.enabled = !on;
             if (companions != null)
                 for (int i = 0; i < companions.Length; i++)
