@@ -622,6 +622,17 @@ namespace Case2
         /// that left a tile a hair proud would break it in a way a pit-open check cannot see.
         /// </para>
         /// </summary>
+        /// <summary>
+        /// How long a full <see cref="RiseTiles"/> takes, from the call to the last tile settling.
+        ///
+        /// The last cell starts a whole <see cref="tileRiseStagger"/> after the first and then runs
+        /// its own <see cref="tileRiseDuration"/>, so the window is the sum - 0.72 s at the measured
+        /// values, against a close beat that is much shorter. Anything that wants to fire "once the
+        /// board is back" has to use this rather than the close, which is what kept releasing the
+        /// hole's outline early.
+        /// </summary>
+        public float RiseTotalSeconds { get { return tileRiseStagger + tileRiseDuration; } }
+
         public void RiseTiles()
         {
             if (_cellTiles == null) CacheCellTiles();
