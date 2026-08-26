@@ -489,6 +489,18 @@ namespace Case3
         /// </summary>
         public void SetPageDressingEnabled(bool on)
         {
+            // The contact shadow FIRST, and directly. It is not in `companions` - only the rim is -
+            // it is found by prefix through PaperShadow(). So the loop below skipped the rim by
+            // design and then had nothing left to touch, which meant this method did nothing at all
+            // and every consumed sticker left its grey shadow lying on the page.
+            SpriteRenderer shadow = PaperShadow();
+            if (shadow != null)
+            {
+                _placed = !on;                  // placed == the paper has left the page for good
+                if (!on) { shadow.enabled = false; }
+                else     { _shadowResolved = false; _paperShadow = null; ApplyPaperShadow(); }
+            }
+
             if (companions == null) return;
             for (int i = 0; i < companions.Length; i++)
             {
