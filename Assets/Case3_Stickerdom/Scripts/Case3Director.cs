@@ -444,6 +444,34 @@ namespace Case3
             }
         }
 
+        /// <summary>
+        /// Nudges an already-landed sheet off the centre of its card so the pile reads as a pile.
+        ///
+        /// Offsets are a fraction of the CARD sprite's own width, not world units, so the pile keeps its
+        /// proportions whatever the card is scaled to. It alternates side to side and grows with depth,
+        /// so each layer clears the one under it instead of hiding inside it.
+        ///
+        /// Deliberately does NOT rotate. A tilted fan was tried and the owner rejected it: these are
+        /// printed cards in a neat album, not a hand thrown down on a table, and a few degrees of tilt
+        /// read as sloppy rather than as depth. Position only.
+        ///
+        /// DEVIATION, recorded rather than fitted: the reference never lands a SECOND item of a kind -
+        /// every counter in it reads 1/5 - so there is no footage to measure these against. They are an
+        /// authored look chosen to read at this card size, not a measurement.
+        /// </summary>
+        void FanOntoStack(Transform sheet, SpriteRenderer card, int index)
+        {
+            if (sheet == null || card == null || card.sprite == null) return;
+            float w = card.sprite.bounds.size.x * card.transform.lossyScale.x;
+            float side = (index % 2 == 1) ? 1f : -1f;
+            float depth = 1f + (index - 1) * 0.55f;
+            sheet.position = sheet.position + new Vector3(side * w * 0.10f * depth, -w * 0.055f * depth, -0.01f * index);
+            // Square to the card. A page sticker is authored at an angle so the pile on the desk looks
+            // scattered, and the sheet carries that angle all the way to the album unless it is squared
+            // here - which is the other half of "yamuk yapma": not just no fan, no inherited tilt either.
+            sheet.rotation = card.transform.rotation;
+        }
+
         /// <summary>Marks coverage as needing a recompute; the next question about it pays for it.</summary>
         public void InvalidateCoverage() { _coverageDirty = true; }
 
@@ -923,9 +951,23 @@ namespace Case3
             PushStack(cur.key);
             if (cur.reward != null)
             {
-                cur.sticker.enabled = false;
-                if (cur.peel != null) cur.peel.SetCompanionsEnabled(false);
-                if (firstOfKind) SetRewardAlpha(cur, 0f);
+                // The FIRST of a kind hands the card its printed face and then gets out of the way.
+                // Every one after it STAYS on screen, fanned over the pile: the card is one renderer
+                // shared by every item of its kind, so hiding the second sheet too left the counter
+                // reading 2/5 with pixels identical to 1/5 - the owner's "it lands on the empty panel
+                // even when it is full". A stack has to be visible to be a stack.
+                if (firstOfKind)
+                {
+                    cur.sticker.enabled = false;
+                    if (cur.peel != null) cur.peel.SetCompanionsEnabled(false);
+                    SetRewardAlpha(cur, 0f);
+                }
+                else
+                {
+                    if (cur.peel != null) cur.peel.SetCompanionsEnabled(false);
+                    cur.sticker.sortingOrder = cur.reward.sortingOrder + StackCount(cur.key);
+                    FanOntoStack(cur.sticker.transform, cur.reward, StackCount(cur.key) - 1);
+                }
             }
 
             AudioService.PlayLayered(SfxId.AttachPop, SfxId.RippleTick, 0.055f);
@@ -1146,6 +1188,12 @@ namespace Case3
                 Debug.Log("[Case3] press at " + screen + " hit no playable sticker; ignored");
                 return;
             }
+
+            // Tell the sheet where the finger landed. The reference peels AWAY from the tap - all three
+            // of its peels start at the sheet end farthest from the tap point - so the curl direction is
+            // the player's, not a constant. No origin means the sticker keeps its own fallback angle.
+            if (entries[index] != null && entries[index].peel != null)
+                entries[index].peel.SetPeelOrigin(TapWorldPoint(screen));
 
             PlaySelected(index);
         }
