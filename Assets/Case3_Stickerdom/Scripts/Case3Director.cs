@@ -168,23 +168,43 @@ namespace Case3
         // ------------------------------------------------------------------ coverage
 
         /// <summary>
-        /// How much of a sticker another sheet has to hide before it stops being tappable.
+        /// How much of a page item another item has to hide before it stops being tappable.
         ///
-        /// DERIVED, not inherited. Rasterising every above/below pair's true alpha overlap on the
-        /// authored page gives one pair at 13.7% (Sticker_Cat, order 506, over Sticker_Sweets, 505)
-        /// and 0.00% for all nine others. 2% sits in that gap with an order of magnitude of clearance
-        /// on both sides. tools/case3_gate.py coverage re-measures it and goes red if a scene edit
-        /// ever puts a pair INSIDE the gap, because then the number would no longer be derived.
+        /// DERIVED, and re-derived here because the first derivation was measured through a BLIND
+        /// instrument. The earlier number (2%) came from a sweep that reported "one pair at 13.7%,
+        /// 0.00% for all nine others". Every one of those zeroes was an artefact: fourteen of the
+        /// nineteen page sprites had Read/Write off, <see cref="SpriteAlphaAt"/> returns -1 for an
+        /// unreadable texture, and -1 fails the alpha test at every sample, so those sprites measured
+        /// as having no drawn area at all. The page was never that empty.
+        ///
+        /// With Read/Write on, the true population of per-item coverage on the authored page is
+        ///     0.00 0.00 0.00 0.00 0.00 1.39 1.92 | 13.72 15.93 25.82 26.13 28.19 45.10 66.28 86.04
+        /// - a real gap between 1.92% (PageObj_choc, grazed by the marshmallows) and 13.72%
+        /// (Sticker_Sweets under Sticker_Cat). 5% sits in the middle of THAT gap: 2.6x above the
+        /// highest non-overlap and 2.7x below the lowest genuine one. 2% would have sat 4% clear of
+        /// PageObj_choc, which is inside measurement noise.
         /// </summary>
-        public const float CoverThreshold = 0.02f;
+        public const float CoverThreshold = 0.05f;
 
-        /// <summary>Sample grid used to measure coverage. Resolves a 2% region with room to spare.</summary>
+        /// <summary>Sample grid used to measure coverage. Resolves a 5% region with room to spare.</summary>
         const int CoverageSamples = 64;
 
         bool[] _covered;
         bool _coverageDirty = true;
         Material[] _litMaterial;
         bool _dimWarned;
+
+        /// <summary>
+        /// Entries whose sprite texture could not be read on the last <see cref="RecomputeCoverage"/>.
+        ///
+        /// This is the failure that produced the wrong threshold and the wrong page: an unreadable
+        /// texture makes <see cref="Coverage"/> return 0 for a sprite that is in fact buried, and 0
+        /// reads as "uncovered, light it up". It is a measurement outage and it must never again be
+        /// indistinguishable from a measurement of zero, so it is counted, logged and asserted on by
+        /// Case3CoverageGate rather than swallowed.
+        /// </summary>
+        public int CoverageBlindCount { get; private set; }
+        bool _blindWarned;
 
         /// <summary>
         /// Fraction of this sticker's own DRAWN area that a sticker drawn above it hides.
@@ -245,10 +265,24 @@ namespace Case3
             if (_covered == null || _covered.Length != Count) _covered = new bool[Count];
             if (_litMaterial == null || _litMaterial.Length != Count) _litMaterial = new Material[Count];
 
+            CoverageBlindCount = 0;
             for (int i = 0; i < Count; i++)
             {
                 Entry e = entries[i];
                 if (e == null || e.sticker == null) { _covered[i] = false; continue; }
+                if (e.sticker.sprite != null && e.sticker.sprite.texture != null &&
+                    !e.sticker.sprite.texture.isReadable)
+                {
+                    CoverageBlindCount++;
+                    if (!_blindWarned)
+                    {
+                        _blindWarned = true;
+                        Debug.LogError("[Case3] " + e.sticker.name + "'s sprite texture is not readable, so its " +
+                                       "coverage cannot be measured and will read as 0% - i.e. it will be lit and " +
+                                       "tappable however deeply it is buried. Tick Read/Write on every page sprite. " +
+                                       "This exact outage is what made the whole page measure 0.00% before.");
+                    }
+                }
                 _covered[i] = Coverage(i) >= CoverThreshold;
             }
             ApplyCoveredMaterials();

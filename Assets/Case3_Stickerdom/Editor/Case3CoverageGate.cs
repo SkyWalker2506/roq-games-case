@@ -29,9 +29,19 @@ using Case3;
 /// RED BEFORE THE FIX, and this is not hypothetical: rasterised at 200 px/unit over all ten
 /// above/below pairs on the authored page, Sticker_Cat (order 506) covers 13.7% of Sticker_Sweets
 /// (order 505) and every other pair overlaps by 0.00%. Sticker_Sweets shipped lit and tappable while
-/// covered. An AABB test had claimed nine pairs overlapped; alpha says one. The 2% threshold is
-/// derived from that population gap - an order of magnitude of clearance on each side - not
-/// inherited from anywhere.
+/// covered. An AABB test had claimed nine pairs overlapped; alpha says one.
+///
+/// THAT "every other pair overlaps by 0.00%" WAS FALSE, and this gate could not see it. Fourteen of
+/// the nineteen page sprites had Read/Write off; the alpha sampler returns -1 for an unreadable
+/// texture, -1 fails the alpha test at every sample, and a sprite with no samples measures as having
+/// no drawn area and therefore 0% coverage. The gate's CONTROL only proved that SOME pair overlapped,
+/// which the one readable pair supplied, so the outage passed as a fact about the page. With
+/// Read/Write on, seven page items are genuinely buried between 15.9% and 86.0%.
+///
+/// Two consequences, both carried here: the threshold moved to 5% (the middle of the real gap,
+/// 1.92% .. 13.72%, instead of 4% clear of the highest non-overlap), and the gate now asserts the
+/// director measured NOTHING blind - a coverage outage is no longer allowed to look like a
+/// measurement of zero.
 /// </summary>
 [InitializeOnLoad]
 public static class Case3CoverageGate
@@ -42,7 +52,7 @@ public static class Case3CoverageGate
     const double RunTimeout = 25.0;
 
     /// <summary>The gate's own threshold. Deliberately a separate constant from the director's.</summary>
-    const float CoverThreshold = 0.02f;
+    const float CoverThreshold = 0.05f;
 
     /// <summary>Gate-side sampling grid; a different resolution from the director's on purpose.</summary>
     const int Samples = 96;
@@ -116,6 +126,18 @@ public static class Case3CoverageGate
                 // ---- the page at rest, every sheet still on it
                 Report(director, "AT_REST");
                 CheckInvariant(director, "AT_REST");
+
+                // ---- the instrument must not be blind. A sprite whose texture cannot be read
+                // measures 0% coverage no matter how deeply it is buried, and 0% reads as "light it
+                // up and let the player tap it". That outage is what produced the previous, wrong
+                // picture of this page, so it is a hard failure now rather than a silent zero.
+                if (director.CoverageBlindCount > 0)
+                {
+                    Fail("INSTRUMENT", director.CoverageBlindCount + " entr(y/ies) have an unreadable sprite " +
+                         "texture, so their coverage is not measured but reported as 0%");
+                    Finish(null, 1);
+                    return;
+                }
 
                 // ---- control: the instrument must actually find the overlap it exists to police.
                 // If every pair measured 0, "covered items are dim" would pass on a page with no
