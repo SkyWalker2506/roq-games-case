@@ -29,7 +29,9 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _RimPixels: 10
+    - _AlphaCut: 0.5
+    - _EdgeAA: 1.5
+    - _RimPixels: 9
     m_Colors:
     - _Color: {r: 0.22, g: 0.14, b: 0.08, a: 0.42}
   m_BuildTextureStacks: []

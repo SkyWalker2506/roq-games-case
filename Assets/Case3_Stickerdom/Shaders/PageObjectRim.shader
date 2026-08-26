@@ -1,32 +1,50 @@
 // Case 3 - die-cut sticker rim / drop shadow for page objects.
 //
-// The reference's page items are printed stickers: every one of them, bright or dimmed,
-// is cut out with a thick white border and drops a soft shadow onto the paper. Our page
-// object textures carry no border at all (measured: 0 near-white pixels inside the opaque
-// area of all 14 obj_*.png), so the rim cannot come from the art - it has to be generated.
+// STRUCTURAL INVARIANT
+//     The rim's coverage is a function of the screen-space distance d from the fragment to
+//     the art's HARD silhouette (alpha >= _AlphaCut) and of nothing else:
 //
-// This shader renders the sprite's alpha DILATED by a fixed width, flat-filled with
-// _Color. Drawn on a sibling renderer one sorting order behind the object it belongs to,
-// the dilated silhouette shows only as a ring around the object: a die cut. Give it a dark
-// colour and an offset and the same pass is the drop shadow.
+//         coverage(d) = saturate((W + aa/2 - d) / aa)
 //
-// WIDTH UNIT: _RimPixels is in RENDER TARGET PIXELS, not texels and not world units. The
-// UV step per screen pixel is taken from ddx/ddy of the texcoord, so the rim keeps the same
-// on-screen thickness whatever the sprite's texture resolution or the object's scale is.
-// This is the unit the reference is authored in - its rims measure 8-14 px on a 1080-wide
-// frame regardless of how big the sticker is.
+//     so it is 1 for d <= W - aa/2, 0 for d >= W + aa/2, and the transition is aa pixels
+//     wide wherever you stand on the outline. That is what a printed die cut is: a
+//     constant-width outset of the silhouette with a hard, antialiased edge.
 //
-// CLIPPING: every obj_*.png is imported with spriteMeshType 0 (FullRect) and carries at
-// least 9 px of transparent padding on every side, so a dilation of up to ~7 texels has
-// somewhere to go. The ring taps are saturated into [0,1] so a wider setting degrades into
-// a clipped rim rather than sampling a neighbouring sprite.
+// WHAT WAS WRONG BEFORE, AND WHY IT READ AS A BLUR
+//     The previous version computed the rim as max(sourceAlpha) over a ring of taps. Max
+//     over a ring DILATES the alpha, it does not harden it: the rim's outer profile came
+//     out as a copy of the art's own alpha feather, shifted outward by the ring radius.
+//     Every obj_*.png is feathered - measured on the shipped PNGs, the alpha takes a
+//     median of 5 to 10 texels to fall from 0.95 to 0.05, with tails to 41 texels
+//     (obj_bunplate 9, obj_pie 8, obj_teddy 10, obj_choc 1). So the white band faded out
+//     over five to ten pixels instead of one, and because the feather length varies from
+//     1 to 41 texels AROUND ONE SPRITE, the band's apparent width varied with it: fuzzy in
+//     some places, a smear in others. Thresholding FIRST and measuring distance SECOND
+//     severs the rim's geometry from the art's alpha ramp entirely.
+//
+// HOW d IS FOUND
+//     A radial march on the thresholded silhouette: 16 evenly spaced directions, radii
+//     stepped outward until the first hit, then three bisections inside the bracket that
+//     hit. The radial step is tied to the texture's texel size (never coarser than one
+//     texel on screen), so a thin feature - a chopstick, a wisp of steam - cannot fall
+//     between two rings and lose its border, which is the other half of the old artefact.
+//     16 directions bound the width error at 1/cos(11.25 deg) = 1.9%.
+//
+// WIDTH UNIT: _RimPixels is in RENDER TARGET PIXELS, not texels and not world units, taken
+// from ddx/ddy of the texcoord. The rim keeps its on-screen thickness whatever the sprite's
+// resolution or the object's scale is. This is the unit the reference is authored in.
+//
+// CLIPPING: taps are saturated into [0,1], so a rim wider than the sprite's transparent
+// padding degrades into a clipped rim rather than sampling a neighbouring sprite.
 Shader "Case3/PageObjectRim"
 {
     Properties
     {
         [PerRendererData] _MainTex ("Sprite Texture", 2D) = "white" {}
         _Color ("Rim Colour", Color) = (1,1,1,1)
-        _RimPixels ("Rim Width (render-target px)", Range(0, 32)) = 10
+        _RimPixels ("Rim Width (render-target px)", Range(0, 32)) = 9
+        _EdgeAA ("Edge softness (render-target px)", Range(0.25, 6)) = 1.5
+        _AlphaCut ("Silhouette threshold", Range(0.05, 0.95)) = 0.5
     }
 
     SubShader
@@ -50,11 +68,15 @@ Shader "Case3/PageObjectRim"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma target 3.0
             #include "UnityCG.cginc"
 
             sampler2D _MainTex;
+            float4 _MainTex_TexelSize;
             fixed4 _Color;
             float _RimPixels;
+            float _EdgeAA;
+            float _AlphaCut;
 
             struct appdata_t
             {
@@ -79,8 +101,6 @@ Shader "Case3/PageObjectRim"
                 return OUT;
             }
 
-            // 16 evenly spaced directions; the ring is sampled at full radius and at half
-            // radius so a thin neck in the art cannot leave a gap in the rim.
             static const float2 kDir[16] =
             {
                 float2( 1.0000,  0.0000), float2( 0.9239,  0.3827),
@@ -93,26 +113,72 @@ Shader "Case3/PageObjectRim"
                 float2( 0.7071, -0.7071), float2( 0.9239, -0.3827)
             };
 
+            // 1 where the art is solid, 0 where it is not. No partial values leave this
+            // function - that is the whole point.
+            float Solid(float2 uv)
+            {
+                return step(_AlphaCut, tex2Dlod(_MainTex, float4(saturate(uv), 0, 0)).a);
+            }
+
+            // Does the silhouette touch the ring of radius r (in render px) around uv?
+            float RingHit(float2 uv, float2 perPixel, float r)
+            {
+                float hit = 0;
+                [unroll]
+                for (int i = 0; i < 16; i++)
+                    hit = max(hit, Solid(uv + kDir[i] * perPixel * r));
+                return hit;
+            }
+
             fixed4 frag(v2f IN) : SV_Target
             {
                 float2 uv = IN.texcoord;
-                // uv travelled per render-target pixel, along u and along v
                 float2 perPixel = float2(
                     length(float2(ddx(uv.x), ddy(uv.x))),
                     length(float2(ddx(uv.y), ddy(uv.y))));
-                float2 step = perPixel * _RimPixels;
 
-                float a = tex2Dlod(_MainTex, float4(uv, 0, 0)).a;
-                [unroll]
-                for (int i = 0; i < 16; i++)
+                float aa = max(_EdgeAA, 0.25);
+                float R = _RimPixels + aa * 0.5;          // nothing past this can matter
+
+                float d = R + 1.0;                        // "no silhouette in range"
+                if (Solid(uv) > 0.5)
                 {
-                    float2 d = kDir[i] * step;
-                    a = max(a, tex2Dlod(_MainTex, float4(saturate(uv + d), 0, 0)).a);
-                    a = max(a, tex2Dlod(_MainTex, float4(saturate(uv + d * 0.5), 0, 0)).a);
+                    d = 0.0;
+                }
+                else
+                {
+                    // Never step further than one on-screen texel, so a one-texel-wide
+                    // feature cannot slip between two rings and lose its rim.
+                    float texelPx = min(_MainTex_TexelSize.x / max(perPixel.x, 1e-8),
+                                        _MainTex_TexelSize.y / max(perPixel.y, 1e-8));
+                    float step0 = clamp(min(texelPx, R / 8.0), R / 24.0, R / 8.0);
+                    float lo = 0.0;
+                    float hi = -1.0;
+                    [loop]
+                    for (int k = 1; k <= 24; k++)
+                    {
+                        float r = step0 * k;
+                        if (r > R) { r = R; }
+                        if (RingHit(uv, perPixel, r) > 0.5) { hi = r; break; }
+                        lo = r;
+                        if (r >= R) break;
+                    }
+                    if (hi > 0.0)
+                    {
+                        // three bisections inside the bracket that hit: distance is then
+                        // known to step0/8, i.e. under a fifth of a pixel.
+                        [unroll]
+                        for (int b = 0; b < 3; b++)
+                        {
+                            float mid = 0.5 * (lo + hi);
+                            if (RingHit(uv, perPixel, mid) > 0.5) hi = mid; else lo = mid;
+                        }
+                        d = hi;
+                    }
                 }
 
+                float a = saturate((_RimPixels + aa * 0.5 - d) / aa);
                 a *= IN.color.a;
-                // premultiplied, to match Blend One OneMinusSrcAlpha
                 return fixed4(IN.color.rgb * a, a);
             }
             ENDCG
