@@ -502,6 +502,31 @@ namespace Case3
             // a wrong one.
             c.counter.text = c.Collected + "/" + Mathf.Max(1, c.requirement > 0 ? c.requirement : stackRequirement);
             c.counter.enabled = c.Collected > 0;
+
+            // The counter is drawn ON TOP of everything on its card.
+            //
+            // It is authored as a child of the card, so it inherited the card's order (~600) while the
+            // landed sheets are lifted to CarrySortingOrder() + stack depth (612 and up). The sticker
+            // therefore covered its own counter - the fourth time today that an order which was right
+            // when it was written went stale once the object it sits over moved band.
+            //
+            // Derived, not authored: whatever the pile climbs to, the number stays above it.
+            var cr = c.counter.renderer;
+            if (cr != null)
+            {
+                cr.sortingLayerID = c.card != null ? c.card.sortingLayerID : cr.sortingLayerID;
+                cr.sortingOrder = CarrySortingOrder() + MaxRequirement() + 1;
+            }
+        }
+
+        /// <summary>The deepest any pile on any card can get, so the counter can clear all of them.</summary>
+        int MaxRequirement()
+        {
+            int top = stackRequirement;
+            if (stacks != null)
+                for (int i = 0; i < stacks.Length; i++)
+                    if (stacks[i] != null && stacks[i].requirement > top) top = stacks[i].requirement;
+            return top;
         }
 
         /// <summary>Empties every card. Only the replay path uses it.</summary>
