@@ -23,7 +23,6 @@ namespace Case2
 
         [Header("Materials (filled in by Case2SceneSetup)")]
         public Material outlineMaterial;
-        public Material shadowMaterial;
         public Material grabDotMaterial;
 
         [Header("Feel")]
@@ -51,12 +50,6 @@ namespace Case2
 
         [Tooltip("White outline thickness in world units.")]
         public float outlineWidth = 0.022f;
-
-        [Tooltip("Ground shadow offset while the block is held; this is what sells the lift.")]
-        public Vector3 shadowOffset = new Vector3(0.16f, 0f, -0.16f);
-
-        [Tooltip("Height the ground shadow is drawn at, just above the floor tiles.")]
-        public float shadowGroundY = 0.014f;
 
         [Tooltip("How close (XZ) the block centre must be to a hole to count as hovering it.")]
         public float hoverRadius = 0.70f;
@@ -222,8 +215,6 @@ namespace Case2
 
         Transform _outline;
         Transform _grabDot;
-        Transform _shadow;
-        Renderer _shadowRenderer;
         Renderer _outlineRenderer;
         MaterialPropertyBlock _mpb;
 
@@ -277,7 +268,6 @@ namespace Case2
             if (_activeDrag == this) _activeDrag = null;
             ClearHover();
             HideHeldLayers();
-            HideShadow();
         }
 
         /// <summary>Puts the block back in play (used by a replay reset).</summary>
@@ -672,7 +662,6 @@ namespace Case2
                 // wedged in the opening rather than seated in it.
                 block.rotation = Quaternion.Slerp(fromRot, _homeRot, Mathf.Clamp01(k));
                 block.localScale = Vector3.LerpUnclamped(fromScale, toScale, k);
-                UpdateShadow();
                 yield return null;
             }
 
@@ -688,7 +677,6 @@ namespace Case2
             _lift = 0f;
             _held = false;
             _programmatic = false;
-            HideShadow();
         }
 
         /// <summary>Returns the block to the board where it started, used when a user drop misses.</summary>
@@ -706,7 +694,6 @@ namespace Case2
                 float k = Ease.Evaluate(EaseType.OutCubic, Mathf.Clamp01(t / duration));
                 block.position = Vector3.Lerp(from, _homePos, k);
                 block.rotation = Quaternion.Slerp(fromRot, _homeRot, k);
-                UpdateShadow();
                 yield return null;
             }
             ResetInstant();
@@ -729,7 +716,6 @@ namespace Case2
             _dragXZ = new Vector3(_homePos.x, 0f, _homePos.z);
             ClearHover();
             HideHeldLayers();
-            HideShadow();
         }
 
         /// <summary>
@@ -905,7 +891,6 @@ namespace Case2
             _dragXZ = new Vector3(block.position.x, 0f, block.position.z);
             if (_outline != null) _outline.gameObject.SetActive(true);
             if (_grabDot != null) _grabDot.gameObject.SetActive(true);
-            if (_shadow != null) _shadow.gameObject.SetActive(true);
             PushOutlineColor();
         }
 
@@ -915,7 +900,6 @@ namespace Case2
             Vector3 next = new Vector3(_dragXZ.x, _homePos.y + liftHeight * _lift, _dragXZ.z);
             UpdateDragTilt(next);
             block.position = next;
-            UpdateShadow();
         }
 
         /// <summary>
@@ -960,31 +944,6 @@ namespace Case2
         {
             _dragXZ = new Vector3(x, 0f, z);
             ApplyTransform();
-        }
-
-        void UpdateShadow()
-        {
-            if (_shadow == null || !_shadow.gameObject.activeSelf) return;
-
-            float lift = Mathf.Clamp01((block.position.y - _homePos.y) / Mathf.Max(0.001f, liftHeight));
-            // Follow the mesh, not the pivot: on a block whose art hangs off a child the two are not
-            // the same point and the shadow would sit beside the block instead of under it.
-            Vector3 meshWorld = block.TransformPoint(_meshLocalOffset);
-            _shadow.rotation = _blockFilter != null ? _blockFilter.transform.rotation : block.rotation;
-            Vector3 p = meshWorld + shadowOffset * lift;
-            _shadow.position = new Vector3(p.x, shadowGroundY, p.z);
-            float s = Mathf.Lerp(1f, 1.06f, lift);
-            _shadow.localScale = new Vector3(s, 0.02f, s);
-
-            if (_mpb == null) _mpb = new MaterialPropertyBlock();
-            _shadowRenderer.GetPropertyBlock(_mpb);
-            _mpb.SetColor(BaseColorId, new Color(0.05f, 0.05f, 0.08f, Mathf.Lerp(0f, 0.30f, lift)));
-            _shadowRenderer.SetPropertyBlock(_mpb);
-        }
-
-        void HideShadow()
-        {
-            if (_shadow != null) _shadow.gameObject.SetActive(false);
         }
 
         void HideHeldLayers()
@@ -1090,21 +1049,6 @@ namespace Case2
                 go.SetActive(false);
             }
 
-            if (_shadow == null && shadowMaterial != null)
-            {
-                GameObject go = new GameObject("DragShadow");
-                go.transform.SetParent(block.parent, false);
-                go.hideFlags = HideFlags.DontSave;
-                MeshFilter mf = go.AddComponent<MeshFilter>();
-                mf.sharedMesh = _blockFilter.sharedMesh;
-                MeshRenderer mr = go.AddComponent<MeshRenderer>();
-                mr.sharedMaterial = shadowMaterial;
-                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                mr.receiveShadows = false;
-                _shadow = go.transform;
-                _shadowRenderer = mr;
-                go.SetActive(false);
-            }
         }
     }
 }

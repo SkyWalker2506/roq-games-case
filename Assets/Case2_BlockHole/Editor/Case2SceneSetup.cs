@@ -94,12 +94,6 @@ public static class Case2SceneSetup
             if (m.HasProperty("_FaceContrast")) m.SetFloat("_FaceContrast", 0.14f);
         });
 
-        Material shadowMat = EnsureMaterial(MaterialDir + "/Case2_DragShadow.mat", "Universal Render Pipeline/Unlit", m =>
-        {
-            MakeTransparent(m);
-            m.SetColor("_BaseColor", new Color(0.05f, 0.05f, 0.08f, 0.30f));
-        });
-
         Material dotMat = EnsureMaterial(MaterialDir + "/Case2_GrabDot.mat", "Universal Render Pipeline/Unlit", m =>
         {
             m.SetColor("_BaseColor", Color.white);
@@ -309,7 +303,6 @@ public static class Case2SceneSetup
             ctl.targetCamera = sceneCam;
             ctl.holes = holeList.ToArray();
             ctl.outlineMaterial = outlineMat;
-            ctl.shadowMaterial = shadowMat;
             ctl.grabDotMaterial = dotMat;
             ctl.hoverRadius = Mathf.Max(0.70f, pitch * 0.42f);
             ctl.fracturedPrefab = LoadFractured(shape);
