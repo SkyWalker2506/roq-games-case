@@ -500,7 +500,7 @@ namespace Case3
             // Per-card first, global as the fallback. Deliberately NOT clamping Collected: clamping
             // would print 5/5 with six items sitting on the card, replacing an impossible number with
             // a wrong one.
-            c.counter.text = c.Collected + "/" + Mathf.Max(1, c.requirement > 0 ? c.requirement : stackRequirement);
+            c.counter.text = c.Collected + "/" + DenominatorFor(c);
             c.counter.enabled = c.Collected > 0;
 
             // The counter is drawn ON TOP of everything on its card.
@@ -517,6 +517,27 @@ namespace Case3
                 cr.sortingLayerID = c.card != null ? c.card.sortingLayerID : cr.sortingLayerID;
                 cr.sortingOrder = CarrySortingOrder() + MaxRequirement() + 1;
             }
+        }
+
+        /// <summary>
+        /// How many of a kind the card asks for: exactly what the PAGE holds.
+        ///
+        /// COUNTED AT RUNTIME, deliberately, rather than read from the serialized `requirement`.
+        /// That field lives in the scene, and the scene is hand-authored by the owner, so a corrected
+        /// value in the builder only reaches the card if someone re-runs Build - which nobody is
+        /// going to do before delivery. Counting the entries needs no scene write and cannot go stale
+        /// when the page's population changes.
+        ///
+        /// The serialized value is still honoured as a fallback for a card with no items on the page.
+        /// </summary>
+        int DenominatorFor(StackCard c)
+        {
+            int have = 0;
+            if (entries != null && c != null)
+                for (int i = 0; i < entries.Length; i++)
+                    if (entries[i] != null && entries[i].key == c.key) have++;
+            if (have > 0) return have;
+            return Mathf.Max(1, c != null && c.requirement > 0 ? c.requirement : stackRequirement);
         }
 
         /// <summary>The deepest any pile on any card can get, so the counter can clear all of them.</summary>
