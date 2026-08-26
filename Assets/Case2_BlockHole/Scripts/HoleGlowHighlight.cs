@@ -618,7 +618,20 @@ namespace Case2
         /// Clip height for a tile IN FLIGHT. Deep enough that the tile is seen coming up out of the
         /// opening, shallow enough that the bottom rail still covers it from the front.
         /// </summary>
-        public const float FlightClipY = -0.9f;
+        /// <summary>
+        /// Clip height for a tile IN FLIGHT.
+        ///
+        /// -0.27, a quarter of a unit under the tray floor. It was -0.9, which needed the bottom
+        /// frame rail deepened to cover it - and that rail then intersected the bottom-row hole and
+        /// filled its cavity with a flat dark slab. Solving one edge case by growing geometry into
+        /// another one is not solving it.
+        ///
+        /// A quarter unit is enough for the tile to be seen crossing out of the opening, and at this
+        /// camera - orthographic, 80 degrees - it projects to about five screen pixels below the
+        /// front edge, so no rail has to grow at all. The 2-unit climb above the plane is untouched;
+        /// that is where the motion reads anyway.
+        /// </summary>
+        public const float FlightClipY = -0.27f;
 
         void SetTileVisible(int i, bool visible)
         {
