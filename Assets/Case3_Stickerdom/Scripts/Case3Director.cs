@@ -136,6 +136,46 @@ namespace Case3
         [Tooltip("Peak of the landing overshoot, as a fraction: 0.05 means the sticker splats 5% wide before settling.")]
         public float popStretch = 0.050f;
 
+        [Header("Landing trace (diagnostics)")]
+        [Tooltip("Logs the sheet's DRAWN world position every frame from the start of the flight to the " +
+                 "end of the settle, and states whether the landing was one move or several. Left on: " +
+                 "it costs one 9x9 curl sample per frame for about half a second per run, and it is the " +
+                 "only thing that can tell a smooth landing from a corrected one without a video.")]
+        public bool traceLanding = true;
+
+        [Tooltip("THE INVARIANT. Once the flight has begun, the drawn sheet must only ever get CLOSER " +
+                 "to where it finally comes to rest. A frame that increases that remaining distance is " +
+                 "a correction - a second move the player reads as a hop - and this is how big one is " +
+                 "allowed to be, as a fraction of the flight chord.\n\n" +
+                 "0.01 is measured, not chosen: tracked frame by frame off Stickerdom.mp4, the " +
+                 "reference's first landing (t=1.074 to 1.406, 760 px chord) never retreats at all - " +
+                 "its progress along the chord is strictly increasing on all 20 frames - and the " +
+                 "largest lateral wobble the tracker itself reports is 7.2 px, 0.95% of the chord. So " +
+                 "the reference's own measurement noise IS the band.")]
+        public float landingReversalBand = 0.01f;
+
+        /// <summary>
+        /// The last trace, verbatim. The Unity console truncates a block this long and a CLI read of it
+        /// comes back cut, so the report is also parked here where a one-line eval can fetch all of it.
+        /// </summary>
+        public static string LastLandingTrace = "";
+
+        /// <summary>Verdict of the last trace; both checks had to pass.</summary>
+        public static bool LastLandingGreen;
+
+        struct TraceSample
+        {
+            public float t;
+            public string phase;
+            public Vector3 drawn;      // what the player sees: curl mesh AABB centre
+            public Vector3 origin;     // sticker.transform.position, for naming the writer
+        }
+
+        readonly System.Collections.Generic.List<TraceSample> _trace =
+            new System.Collections.Generic.List<TraceSample>(256);
+        StickerPeel _tracePeel;
+        float _traceChord;
+
         int _current = -1;
         Transform _stickerTf;
         float _t0;
@@ -477,17 +517,162 @@ namespace Case3
         /// every counter in it reads 1/5 - so there is no footage to measure these against. They are an
         /// authored look chosen to read at this card size, not a measurement.
         /// </summary>
-        void FanOntoStack(Transform sheet, SpriteRenderer card, int index)
+        Vector3 FanOffset(SpriteRenderer card, int index)
         {
-            if (sheet == null || card == null || card.sprite == null) return;
+            if (card == null || card.sprite == null || index <= 0) return Vector3.zero;
             float w = card.sprite.bounds.size.x * card.transform.lossyScale.x;
             float side = (index % 2 == 1) ? 1f : -1f;
             float depth = 1f + (index - 1) * 0.55f;
-            sheet.position = sheet.position + new Vector3(side * w * 0.10f * depth, -w * 0.055f * depth, -0.01f * index);
-            // Square to the card. A page sticker is authored at an angle so the pile on the desk looks
-            // scattered, and the sheet carries that angle all the way to the album unless it is squared
-            // here - which is the other half of "yamuk yapma": not just no fan, no inherited tilt either.
-            sheet.rotation = card.transform.rotation;
+            return new Vector3(side * w * 0.10f * depth, -w * 0.055f * depth, -0.01f * index);
+        }
+
+        /// <summary>
+        /// Where this item's sheet comes to rest, in DRAWN world space. Decided once, before the sheet
+        /// moves at all, and never recomputed.
+        ///
+        /// Anchored on the REWARD CARD, not on the ghost slot. The two are not the same point: in
+        /// Stickerdom.unity every Ghost_* sits at y = 5.350 and every Reward_* at y = 5.500, so a sheet
+        /// flown to the ghost stops 0.15 u - 15 px at this camera's 100 px/u - below the art it is about
+        /// to become. The ghost still supplies the landing SCALE, which is what it was authored for.
+        /// </summary>
+        Vector3 RestingPlace(Entry e, int fanIndex)
+        {
+            Transform anchor = e.reward != null ? e.reward.transform : e.targetSlot.transform;
+            Vector3 p = anchor.position + FanOffset(e.reward, fanIndex);
+            p.z = e.targetSlot.transform.position.z - 0.15f;
+            return p;
+        }
+
+        /// <summary>
+        /// Moves the sticker so that the thing the PLAYER SEES is centred on <paramref name="target"/>.
+        ///
+        /// Writing <c>transform.position = target</c> does not do this and that is the whole bug: while
+        /// the sheet is curled, the drawn paper sits a long way from its own transform - measured at
+        /// 1.18 u for the cup of ramen and 2.79 u for the candy cane, on a 6-8 u flight. The flight aimed
+        /// the transform, so the DRAWN sheet stopped a fifth of the way short of the card, and the curl
+        /// unwinding during the flip then dragged it the rest of the way in 27 ms. Two moves where the
+        /// player asked for one.
+        ///
+        /// The offset is a pure function of the pose, not of the position, so one probe measures it
+        /// exactly: place, ask where the paper landed, subtract. Costs one 9x9 curl sample per frame.
+        /// </summary>
+        void PlaceDrawnAt(StickerPeel peel, Vector3 target)
+        {
+            if (_stickerTf == null) return;
+            if (peel == null) { _stickerTf.position = target; return; }
+
+            _stickerTf.position = target;
+            Vector3 drawn = peel.VisualWorldCentre(9);
+            _stickerTf.position = new Vector3(target.x - (drawn.x - target.x),
+                                              target.y - (drawn.y - target.y),
+                                              target.z);
+        }
+
+        // ------------------------------------------------------------------ landing trace
+
+        /// <summary>Starts a trace. <paramref name="chord"/> is the straight-line flight distance the band is a fraction of.</summary>
+        void TraceBegin(StickerPeel peel, float chord)
+        {
+            _trace.Clear();
+            _tracePeel = peel;
+            _traceChord = Mathf.Max(0.001f, chord);
+        }
+
+        /// <summary>One sample. Call it every frame of the landing AND immediately after any instant write.</summary>
+        void TraceMark(string phase)
+        {
+            if (!traceLanding || _tracePeel == null) return;
+            _trace.Add(new TraceSample
+            {
+                t = SequenceClock - _t0,
+                phase = phase,
+                drawn = _tracePeel.VisualWorldCentre(9),
+                origin = _stickerTf != null ? _stickerTf.position : Vector3.zero
+            });
+        }
+
+        /// <summary>
+        /// Prints the trace and rules on the invariant.
+        ///
+        /// The rule is structural, not a look: from the first frame of the flight onward the DRAWN
+        /// sheet's distance to where it finally rests must be non-increasing. Every frame that
+        /// increases it is named, with the phase it happened in, so the writer is identifiable from
+        /// the log alone rather than by re-reading the coroutine.
+        /// </summary>
+        void TraceEnd()
+        {
+            if (!traceLanding || _trace.Count < 2) { _tracePeel = null; return; }
+
+            Vector3 rest = _trace[_trace.Count - 1].drawn;
+            float band = landingReversalBand * _traceChord;
+
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(4096);
+            sb.AppendFormat("[Case3] LANDING TRACE {0} -> {1} card; chord {2:0.000} u; band {3:0.0000} u " +
+                            "({4:0.0}% of chord); rest ({5:0.000}, {6:0.000})\n",
+                            NameOf(_current), Current != null ? Current.key : "?", _traceChord, band,
+                            landingReversalBand * 100f, rest.x, rest.y);
+            sb.Append("      t      phase     drawn.x  drawn.y   dist_to_rest   d(dist)\n");
+
+            float worst = 0f;
+            int worstIndex = -1;
+            int reversals = 0;
+            float prev = (_trace[0].drawn - rest).magnitude;
+
+            // CHECK B needs to know where the AUTHORED flight ended.
+            int flightEnd = -1;
+            for (int i = 0; i < _trace.Count; i++)
+                if (_trace[i].phase == "flight-end") { flightEnd = i; break; }
+
+            float postTravel = 0f;
+            float postWorstStep = 0f;
+            int postWorstIndex = -1;
+
+            for (int i = 0; i < _trace.Count; i++)
+            {
+                float d = (_trace[i].drawn - rest).magnitude;
+                float step = i == 0 ? 0f : d - prev;
+                bool isReversal = step > band;
+                if (isReversal) { reversals++; if (step > worst) { worst = step; worstIndex = i; } }
+
+                float moved = 0f;
+                if (i > 0 && flightEnd >= 0 && i > flightEnd)
+                {
+                    moved = (_trace[i].drawn - _trace[i - 1].drawn).magnitude;
+                    postTravel += moved;
+                    if (moved > postWorstStep) { postWorstStep = moved; postWorstIndex = i; }
+                }
+
+                sb.AppendFormat("  {0:0.000}  {1,-10} {2,8:0.000} {3,8:0.000}   {4,10:0.0000}  {5,9:+0.0000;-0.0000; 0.0000}{6}{7}\n",
+                                _trace[i].t, _trace[i].phase, _trace[i].drawn.x, _trace[i].drawn.y, d, step,
+                                isReversal ? "   <== REVERSAL" : "",
+                                moved > band ? "   <== POST-FLIGHT MOVE " + moved.ToString("0.0000") : "");
+                prev = d;
+            }
+
+            // A: the flight only ever closes the gap. Catches an instant hop AWAY - the fan write.
+            bool a = reversals == 0;
+            // B: the flight IS the landing. Once flightDuration has elapsed the drawn sheet is home and
+            //    does not move again. This is the check that catches a SMOOTH second move, which A
+            //    cannot see: a correction that happens to point AT the target still reads to the player
+            //    as a second move, and that is what the curl unwind was doing.
+            bool b = flightEnd >= 0 && postTravel <= band;
+
+            sb.AppendFormat("  CHECK A  flight approaches monotonically : {0} - {1} frame(s) retreated by more " +
+                            "than {2:0.0000} u; worst {3:0.0000} u ({4:0.0}% of chord){5}\n",
+                            a ? "GREEN" : "RED", reversals, band, worst, 100f * worst / _traceChord,
+                            worstIndex >= 0 ? " in phase '" + _trace[worstIndex].phase + "'" : "");
+            sb.AppendFormat("  CHECK B  the flight IS the landing      : {0} - the drawn sheet travelled " +
+                            "{1:0.0000} u ({2:0.0}% of chord) AFTER the flight ended; budget {3:0.0000} u. " +
+                            "Largest single frame {4:0.0000} u{5}\n",
+                            b ? "GREEN" : "RED", postTravel, 100f * postTravel / _traceChord, band, postWorstStep,
+                            postWorstIndex >= 0 ? " in phase '" + _trace[postWorstIndex].phase + "'" : "");
+
+            bool green = a && b;
+            sb.AppendFormat("  VERDICT {0}", green ? "GREEN" : "RED");
+            LastLandingGreen = green;
+            LastLandingTrace = sb.ToString();
+            if (green) Debug.Log(LastLandingTrace); else Debug.LogError(LastLandingTrace);
+            _tracePeel = null;
         }
 
         /// <summary>Marks coverage as needing a recompute; the next question about it pays for it.</summary>
@@ -676,11 +861,15 @@ namespace Case3
         /// </summary>
         bool _pressDriven;
 
+        /// <summary>Index the last press actually resolved to, or -1. Only used to catch a silent swap.</summary>
+        int _requested = -1;
+
         public bool PlaySelected(int index)
         {
             if (IsPlaying || !Playable(index)) return false;
 
             _current = index;
+            _requested = index;
             _stickerTf = entries[index].sticker.transform;
             Debug.Log("[Case3] SELECTED " + NameOf(index) + " (" + entries[index].sticker.name + ")" +
                       " -> card=" + entries[index].key + " " + (StackCount(entries[index].key) + 1) +
@@ -779,6 +968,18 @@ namespace Case3
                 yield break;
             }
 
+            // WHAT WAS TAPPED vs WHAT IS ABOUT TO FLY. EnsureSelection falls back to the first playable
+            // entry whenever _current is not playable, and that fallback is silent: it always lands on
+            // the same low-index item, which reads as "whatever I pick, it places one specific object".
+            // A run that is not the run the player asked for is now loud.
+            if (_requested >= 0 && _current != _requested)
+                Debug.LogError(string.Format(
+                    "[Case3] SELECTION DIVERGED: the press picked {0} (index {1}) but the sequence is " +
+                    "running {2} (index {3}). EnsureSelection fell back because Playable({1}) went false " +
+                    "between the press and the first frame of the run.",
+                    NameOf(_requested), _requested, NameOf(_current), _current));
+            _requested = -1;
+
             Entry cur = Current;
             StickerPeel peel = cur.peel;
             SpriteRenderer targetSlot = cur.targetSlot;
@@ -813,9 +1014,18 @@ namespace Case3
 
             Vector3 homePosition = cur.HomePosition;
             Vector3 homeScale = cur.HomeScale;
-            Vector3 slotPos = targetSlot.transform.position;
-            slotPos.z = targetSlot.transform.position.z - 0.15f;
             Vector3 slotScale = targetSlot.transform.localScale;
+
+            // ONE resting place, decided HERE, before anything moves, and never touched again.
+            // The fan offset for a stacked sheet is part of it - not something applied after the sheet
+            // has already parked in the middle of the card. Commit 989f281 applied it at attach with an
+            // instant write, and the end-of-settle line then snapped the sheet back to the slot centre:
+            // measured on a second cup of ramen, +0.331 u out at t=0.821 and -0.331 u back at t=1.002.
+            // The owner saw both. The offset also did not survive the snap, so the pile it was meant to
+            // make was never on screen at all.
+            int fanIndex = StackCount(cur.key);
+            Vector3 restCentre = RestingPlace(cur, fanIndex);
+            Quaternion restRotation = cur.reward != null ? cur.reward.transform.rotation : Quaternion.identity;
 
             peel.SetMeshMode(true);
             peel.SetProgress(0f);
@@ -886,6 +1096,12 @@ namespace Case3
             peel.SetProgress(peelEnd);
             Vector3 launchPos = homePosition + new Vector3(0f, peelLift, -0.05f);
             _stickerTf.position = launchPos;
+            // The flight is authored in DRAWN space, and it starts wherever the curled paper actually
+            // is - measured, not assumed. Starting it at the transform instead would put a jump the
+            // size of the curl offset on the first frame of the flight, which is the same bug at the
+            // other end of the arc.
+            Vector3 drawnLaunch = peel.VisualWorldCentre(9);
+            drawnLaunch.z = launchPos.z;
 
             // PEEL COMPLETION IS THE PROMOTION INSTANT. In the reference the jar is uncovered at
             // t=4.11 and is a fully collectible sticker from that frame on - it is tapped and
@@ -904,23 +1120,43 @@ namespace Case3
 
             Vector3 flightEndScale = slotScale * flightShrink;
 
+            TraceBegin(peel, Vector3.Distance(drawnLaunch, restCentre));
+            TraceMark("flight");
+
             while (SequenceClock < _t0 + tFlight)
             {
                 float k = Mathf.Clamp01((SequenceClock - _t0 - tPeel) / Mathf.Max(0.0001f, flightDuration));
-                float e = Ease.Evaluate(EaseType.InOutQuad, k);
+                // OutQuad, not InOutQuad. MEASURED off Stickerdom.mp4: the reference's first landing was
+                // tracked frame by frame from t=1.074 to t=1.406 and its arc-length progress fitted
+                // against five curves - OutQuad RMSE 0.079, linear 0.105, InOutQuad 0.134, OutCubic
+                // 0.173, OutQuart 0.233. The reference's peak speed lands at about a quarter of the way
+                // through and decays from there; InOutQuad peaks dead centre and crawls at both ends,
+                // which is why the sheet used to appear to stall just short of the card.
+                float e = Ease.Evaluate(EaseType.OutQuad, k);
 
-                _stickerTf.position = flight.Evaluate(launchPos, slotPos, e);
                 _stickerTf.localScale = Vector3.Lerp(homeScale, flightEndScale, e);
+                // Squaring to the card happens ALONG the flight. It used to be an instant
+                // `sheet.rotation = card.rotation` at attach, which is a hop of its own on the four
+                // page items that are authored at an angle.
+                _stickerTf.rotation = Quaternion.Slerp(cur.HomeRotation, restRotation, e);
 
                 // The reference keeps the blank, curled paper back visible for the whole flight.
                 // The printed face is revealed only once the sheet reaches its card.
                 peel.SetProgress(peelEnd);
-                flight.TryEmit(_stickerTf.position, SequenceClock);
+
+                Vector3 want = flight.Evaluate(drawnLaunch, restCentre, e);
+                PlaceDrawnAt(peel, want);
+                // The trail follows the PAPER, not the transform the paper is hanging off.
+                flight.TryEmit(want, SequenceClock);
+                TraceMark("flight");
                 yield return null;
             }
 
-            _stickerTf.position = slotPos;
             _stickerTf.localScale = flightEndScale;
+            _stickerTf.rotation = restRotation;
+            peel.SetProgress(peelEnd);
+            PlaceDrawnAt(peel, restCentre);
+            TraceMark("flight-end");
             EndStep();
 
             // ---------------------------------------------------------- 3. flip back to the printed face
@@ -940,12 +1176,19 @@ namespace Case3
 
                 peel.SetProgress(Mathf.Lerp(peelEnd, 0f, e));
                 _stickerTf.localScale = Vector3.Lerp(flightEndScale, slotScale * 0.99f, Ease.Evaluate(EaseType.OutQuad, k));
-                _stickerTf.position = slotPos;
+                // Re-anchored EVERY frame of the unwind. The curl offset collapses as the paper
+                // flattens, and holding the transform still while that happens is precisely what used
+                // to drag the drawn sheet 1.18 u across the album in 27 ms. Pinning the DRAWN centre
+                // instead lets the paper unwind in place, which is what the reference does.
+                PlaceDrawnAt(peel, restCentre);
+                TraceMark("flip");
                 yield return null;
             }
 
             peel.SetProgress(0f);
             peel.SetMeshMode(false);
+            PlaceDrawnAt(peel, restCentre);
+            TraceMark("flip-end");
             EndStep();
 
             // ---------------------------------------------------------- 4. attach
@@ -958,7 +1201,7 @@ namespace Case3
                 // 4.2-10.5 px at 100 px/unit, in a cluster ~60 px wide. The reference resolves 7-15
                 // elements of 10-20 px across a ~150 px smear. One number moves both.
                 GameObject burst = VFXPool.Play(attachBurstPrefab,
-                    slotPos + new Vector3(0f, 0f, -0.20f), Quaternion.identity, 1.30f);
+                    restCentre + new Vector3(0f, 0f, -0.20f), Quaternion.identity, 1.30f);
                 RestartSeededParticles(burst, (uint)(0xC3A770u + _current * 101));
             }
 
@@ -974,24 +1217,34 @@ namespace Case3
             PushStack(cur.key);
             if (cur.reward != null)
             {
-                // The FIRST of a kind hands the card its printed face and then gets out of the way.
-                // Every one after it STAYS on screen, fanned over the pile: the card is one renderer
-                // shared by every item of its kind, so hiding the second sheet too left the counter
-                // reading 2/5 with pixels identical to 1/5 - the owner's "it lands on the empty panel
-                // even when it is full". A stack has to be visible to be a stack.
-                if (firstOfKind)
-                {
-                    cur.sticker.enabled = false;
-                    if (cur.peel != null) cur.peel.SetCompanionsEnabled(false);
-                    SetRewardAlpha(cur, 0f);
-                }
-                else
-                {
-                    if (cur.peel != null) cur.peel.SetCompanionsEnabled(false);
-                    cur.sticker.sortingOrder = CarrySortingOrder() + StackCount(cur.key);
-                    FanOntoStack(cur.sticker.transform, cur.reward, StackCount(cur.key) - 1);
-                }
+                // THE SHEET THAT FLEW IS WHAT THE CARD SHOWS. Every one of them, the first included.
+                //
+                // The first of a kind used to switch its own renderer OFF and hand the card over to
+                // card_filled_<key>.png, which has ONE item baked into it. There are 14 tappable
+                // entries and 3 of those cards, so the first Sweets collected always drew the candy
+                // cane whatever was tapped: the owner tapped the chocolate bar and got "ilkini her
+                // zaman seker koyuyor". Proved rather than guessed - on a fresh session the tap
+                // resolved PickSticker -> 9 (Chocolate), PlaySelected(9), _current -1 -> 9, and the
+                // chocolate did leave the page; only the card's pixels were somebody else's. Every
+                // LATER item of a kind already stayed on screen, which is exactly why he saw the
+                // first as fixed and the rest as varying.
+                //
+                // So nothing gets hidden any more. The card supplies the frame, the green name tab
+                // and the counter; the sheet supplies the subject, drawn over them.
+                //
+                // DEVIATION, recorded rather than fitted: card_filled_* still has an item baked into
+                // its middle, and the landed sheet only covers it because it is bigger - measured
+                // footprints run 1.02 x 1.27 u (ramen tin) to 2.11 x 2.48 u (cat) against a baked art
+                // box of roughly 1.05 x 1.58 u. The small ones leave an edge of the wrong drawing
+                // showing. That is a texture problem, not a code one, and it disappears the moment
+                // card_filled_* becomes a frame with a transparent interior.
+                if (cur.peel != null) cur.peel.SetCompanionsEnabled(false);
+                cur.sticker.sortingOrder = CarrySortingOrder() + StackCount(cur.key);
+                // NO position write here. The fan offset was folded into restCentre before the
+                // flight began, so the sheet has already been sitting on its fanned spot since it
+                // landed. Attach is a visual event now, not a move.
             }
+            TraceMark("attach");
 
             AudioService.PlayLayered(SfxId.AttachPop, SfxId.RippleTick, 0.055f);
 
@@ -1017,6 +1270,7 @@ namespace Case3
                     _stickerTf.localScale = Vector3.Scale(slotScale,
                         new Vector3(1f + popStretch * w, 1f - popStretch * 0.55f * w, 1f));
                 }
+                TraceMark("pop");
                 yield return null;
             }
 
@@ -1029,11 +1283,14 @@ namespace Case3
                         new Vector3(1f + d, 1f - d * 0.6f, 1f));
                 else
                     _stickerTf.localScale = Vector3.Scale(slotScale, new Vector3(1f + d, 1f - d * 0.6f, 1f));
+                TraceMark("settle");
                 yield return null;
             }
 
             _stickerTf.localScale = slotScale;
-            _stickerTf.position = slotPos;
+            PlaceDrawnAt(peel, restCentre);
+            TraceMark("final");
+            TraceEnd();
             if (cur.reward != null)
             {
                 cur.reward.transform.localScale = cur.RewardHomeScale;
@@ -1049,8 +1306,12 @@ namespace Case3
                 attachTime - tapDuration, SequenceTime, Time.frameCount - _startFrame,
                 (Time.frameCount - _startFrame) / Mathf.Max(0.001f, SequenceTime),
                 flight != null ? flight.EmittedCount : 0));
-            Debug.Log(string.Format("[Case3] RUN_END {0} landed on the {1} card at {2}/{3}; {4} item(s) still tappable",
-                NameOf(_current), cur.key, StackCount(cur.key), stackRequirement, PlayableCount()));
+            Debug.Log(string.Format("[Case3] RUN_END {0} (sprite '{1}') landed on the {2} card at {3}/{4}; " +
+                                    "the card now draws sprite '{5}'; {6} item(s) still tappable",
+                NameOf(_current), cur.sticker != null && cur.sticker.sprite != null ? cur.sticker.sprite.name : "?",
+                cur.key, StackCount(cur.key), stackRequirement,
+                cur.reward != null && cur.reward.sprite != null ? cur.reward.sprite.name : "?",
+                PlayableCount()));
         }
 
         int PlayableCount()
