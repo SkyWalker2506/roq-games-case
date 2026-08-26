@@ -97,6 +97,17 @@ namespace Case3
             public SpriteRenderer card;
             /// <summary>World-space "n/5" drawn in the card's bottom-right corner.</summary>
             public TMPro.TextMeshPro counter;
+            /// <summary>
+            /// How many of this kind the card asks for. 0 falls back to the global
+            /// <see cref="stackRequirement"/>.
+            ///
+            /// It exists because the page does not hold the same number of every kind: the authored
+            /// population gives Noodle and Sweets SIX collectibles each against a global requirement of
+            /// five, so both cards could reach "6/5" - a counter past its own maximum, which the owner
+            /// saw. The requirement follows the page rather than the page being trimmed to the
+            /// requirement, because the board's density is a visual decision and this is a label.
+            /// </summary>
+            public int requirement;
             [NonSerialized] public int Collected;
         }
 
@@ -486,7 +497,10 @@ namespace Case3
         void RefreshStackLabel(StackCard c)
         {
             if (c == null || c.counter == null) return;
-            c.counter.text = c.Collected + "/" + Mathf.Max(1, stackRequirement);
+            // Per-card first, global as the fallback. Deliberately NOT clamping Collected: clamping
+            // would print 5/5 with six items sitting on the card, replacing an impossible number with
+            // a wrong one.
+            c.counter.text = c.Collected + "/" + Mathf.Max(1, c.requirement > 0 ? c.requirement : stackRequirement);
             c.counter.enabled = c.Collected > 0;
         }
 
@@ -1238,8 +1252,14 @@ namespace Case3
                 // box of roughly 1.05 x 1.58 u. The small ones leave an edge of the wrong drawing
                 // showing. That is a texture problem, not a code one, and it disappears the moment
                 // card_filled_* becomes a frame with a transparent interior.
-                if (cur.peel != null) cur.peel.SetCompanionsEnabled(false);
+                // Page dressing only: the contact shadow goes, the die-cut rim stays. Switching every
+                // companion off here took the sticker's white border with it, so the landed sheet sat
+                // on the card with no die cut while the reference's card subject plainly has one.
+                if (cur.peel != null) cur.peel.SetPageDressingEnabled(false);
                 cur.sticker.sortingOrder = CarrySortingOrder() + StackCount(cur.key);
+                // Drag the rim up with the sheet. Without this the die cut stays in the page band and
+                // is drawn under the card, so the landed sticker has no white border.
+                if (cur.peel != null) cur.peel.SyncMeshSorting();
                 // NO position write here. The fan offset was folded into restCentre before the
                 // flight began, so the sheet has already been sitting on its fanned spot since it
                 // landed. Attach is a visual event now, not a move.

@@ -225,6 +225,19 @@ public static class Case3PageEntries
         log.Insert(0, "[Case3PageEntries] " + entries.Count + " collectible item(s) across " +
                       director.stacks.Length + " card(s); " + PagePrint.Length + " page-print item(s) left as decor\n");
         Debug.Log(log.ToString());
+
+        // Close the Editor when this was driven from the command line.
+        //
+        // Without it the batch instance finishes its work and then sits idle forever holding
+        // tools/unity-run.sh's mkdir lock, and every later run - captures, gates, other agents -
+        // queues behind it in silence. That cost 30 minutes today: a capture appeared to hang when it
+        // had simply never been allowed to start.
+        //
+        // `-quit` is NOT the alternative here. This project bans it because a method that drives
+        // EditorApplication.update returns rc=0 having done nothing, which reads as a pass. Build does
+        // not drive the update loop, so it can and must exit itself - the same thing Case3PageRim,
+        // Case3StripPass and the gates already do.
+        if (Application.isBatchMode) EditorApplication.Exit(0);
     }
 
     /// <summary>
@@ -253,14 +266,32 @@ public static class Case3PageEntries
         }
         foreach (KeyValuePair<string, int> kv in population)
         {
-            log.AppendLine(string.Format("  POPULATION {0}: {1} collectible(s) against a requirement of {2}",
+            log.AppendLine(string.Format("  POPULATION {0}: {1} collectible(s) against a global requirement of {2}",
                 kv.Key, kv.Value, director.stackRequirement));
-            if (kv.Value > director.stackRequirement)
+        }
+
+        // Give every card a requirement its own page can actually reach.
+        //
+        // The counter read 6/5 because the page carries SIX Noodle and SIX Sweets items against a
+        // global requirement of five, and PushStack has no ceiling. Two ways to close that: trim the
+        // page, or let the card ask for what the page holds. Trimming loses collectibles the owner
+        // deliberately left tappable - every item with nothing on top must be collectible - so the
+        // card follows the page.
+        //
+        // DEVIATION, recorded rather than hidden: the reference prints /5 on all three cards. Ours
+        // will print /6 where the page holds six. A denominator that differs per card is a smaller
+        // departure than a counter that exceeds its own maximum, which is what the owner saw.
+        for (int i = 0; i < director.stacks.Length; i++)
+        {
+            Case3Director.StackCard c = director.stacks[i];
+            if (c == null || string.IsNullOrEmpty(c.key)) continue;
+            int have = population.TryGetValue(c.key, out int n) ? n : 0;
+            c.requirement = Mathf.Max(director.stackRequirement, have);
+            log.AppendLine(string.Format("  REQUIREMENT {0}: {1} (page holds {2})", c.key, c.requirement, have));
+            if (have == 0)
                 Debug.LogError(string.Format(
-                    "[Case3PageEntries] STACK_OVERFLOW the '{0}' card can reach {1}/{2}: the page carries " +
-                    "{1} items of that kind and Case3Director.stackRequirement is {2}. Give StackCard its " +
-                    "own requirement, or take {3} item(s) of this kind off the page.",
-                    kv.Key, kv.Value, director.stackRequirement, kv.Value - director.stackRequirement));
+                    "[Case3PageEntries] the '{0}' card has no collectible on the page at all, so its " +
+                    "counter can never move off 0/{1}.", c.key, c.requirement));
         }
     }
 

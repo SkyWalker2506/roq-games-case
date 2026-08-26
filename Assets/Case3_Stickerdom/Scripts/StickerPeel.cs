@@ -227,9 +227,30 @@ namespace Case3
         /// </summary>
         public void SyncMeshSorting()
         {
-            if (_renderer == null || sticker == null) return;
-            _renderer.sortingLayerID = sticker.sortingLayerID;
-            _renderer.sortingOrder = sticker.sortingOrder + sortingOrderBoost;
+            if (sticker == null) return;
+            if (_renderer != null)
+            {
+                _renderer.sortingLayerID = sticker.sortingLayerID;
+                _renderer.sortingOrder = sticker.sortingOrder + sortingOrderBoost;
+            }
+
+            // The companions have to move with the sheet too. The die-cut rim is authored just under
+            // the sticker in the PAGE band (around 140); when the director lifts the sheet over the
+            // album at 600+, a rim left at its page number is drawn UNDER the card and the landed
+            // sticker loses its white border - which is exactly what the capture showed. Same class of
+            // bug as the curl mesh keeping the order it was built with: a value that was only correct
+            // for the moment it was written.
+            //
+            // Rim sits one below the sheet so it reads as a border rather than covering the art;
+            // everything else (the paper contact shadow) goes one below that.
+            if (companions == null) return;
+            for (int i = 0; i < companions.Length; i++)
+            {
+                SpriteRenderer c = companions[i];
+                if (c == null) continue;
+                c.sortingLayerID = sticker.sortingLayerID;
+                c.sortingOrder = sticker.sortingOrder - (c.name == RimChildName ? 1 : 2);
+            }
         }
 
         /// <summary>Forgets the tap, so the next peel falls back to the per-sticker angle.</summary>
@@ -450,6 +471,34 @@ namespace Case3
         /// itself drives these, but the attach step needs them off for good once the card art has
         /// taken over, and the reset needs them back on.
         /// </summary>
+        /// <summary>
+        /// Name of the child that carries the sticker's white die-cut border. It is a companion like
+        /// the contact shadow, but it belongs to the STICKER, not to the page: it must survive the
+        /// landing, while the shadow must not.
+        /// </summary>
+        public const string RimChildName = "Rim";
+
+        /// <summary>
+        /// Drops the dressing that only makes sense while the sheet is lying on the page - the paper
+        /// contact shadow - and KEEPS the die cut, which is part of the sticker wherever it ends up.
+        ///
+        /// `SetCompanionsEnabled(false)` used to be called at attach, back when the landed sheet was
+        /// hidden and replaced by baked card art. Now the sheet IS the card's subject, and switching
+        /// every companion off took its white border with it: the sticker sat on the card with no die
+        /// cut while the reference's card subject clearly has one.
+        /// </summary>
+        public void SetPageDressingEnabled(bool on)
+        {
+            if (companions == null) return;
+            for (int i = 0; i < companions.Length; i++)
+            {
+                SpriteRenderer c = companions[i];
+                if (c == null) continue;
+                if (c.name == RimChildName) continue;   // the die cut travels with the sticker
+                c.enabled = on;
+            }
+        }
+
         public void SetCompanionsEnabled(bool on)
         {
             if (companions == null) return;
