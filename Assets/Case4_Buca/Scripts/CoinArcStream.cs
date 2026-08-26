@@ -71,6 +71,9 @@ namespace Case4
         /// <summary>Uniform neighbour gap the string will have, in capture pixels.</summary>
         public float NeighbourGapPx { get { return _gapPx; } }
 
+        /// <summary>Neighbour gap expressed in coin diameters - the form the 1.00..1.25 band is stated in.</summary>
+        public float NeighbourGapDiameters { get { return _gapPx / RefCoinDiameterPx; } }
+
         // ---- contact arming -------------------------------------------------------------------
         // The payout is not a timeline event: it is a consequence of the puck actually touching the
         // pile. Nothing here can fire until ArmFromContact has been handed a real solver contact
@@ -91,6 +94,32 @@ namespace Case4
 
         /// <summary>Largest distance between a coin's spawn position and the contact point.</summary>
         public float WorstSpawnOffset { get { return _worstSpawnOffset; } }
+
+        /// <summary>
+        /// Viewport position of the FIRST coin on the first frame it was drawn. "The payout did not
+        /// play" and "the payout played somewhere the player cannot see" look identical from the
+        /// owner's chair, and LaunchedCount cannot tell them apart, so the invariant asserts both:
+        /// coins were emitted, AND the first one started inside the frame.
+        /// </summary>
+        public Vector3 FirstCoinViewport { get { return _firstCoinViewport; } }
+
+        /// <summary>True if <see cref="FirstCoinViewport"/> is inside the frame and in front of the camera.</summary>
+        public bool FirstCoinOnScreen
+        {
+            get
+            {
+                return _firstCoinMeasured
+                    && _firstCoinViewport.z > 0f
+                    && _firstCoinViewport.x >= 0f && _firstCoinViewport.x <= 1f
+                    && _firstCoinViewport.y >= 0f && _firstCoinViewport.y <= 1f;
+            }
+        }
+
+        /// <summary>True once a first coin has actually been drawn this run.</summary>
+        public bool FirstCoinMeasured { get { return _firstCoinMeasured; } }
+
+        Vector3 _firstCoinViewport;
+        bool _firstCoinMeasured;
 
         /// <summary>
         /// Arms the payout from the physics solver's own contact point. Called only from the frame in
@@ -323,7 +352,7 @@ namespace Case4
         public const float CaptureAspect = 1080f / 1728f;
 
         /// <summary>Full-size coin diameter in capture pixels at coinScale 0.6184, measured on a capture.</summary>
-        const float RefCoinDiameterPx = 54.1f;
+        public const float RefCoinDiameterPx = 54.1f;
 
         static bool Inside(Vector2 v)
         {
@@ -457,6 +486,8 @@ namespace Case4
 
             Prewarm();
             _launched = 0;
+            _firstCoinMeasured = false;
+            _firstCoinViewport = Vector3.zero;
 
             int count = Mathf.Min(coinCount, _coins.Count);
 
@@ -545,6 +576,15 @@ namespace Case4
                 Vector3 p = Bezier(TForArcLength(t));
                 p.x += lateral * Mathf.Sin(t * Mathf.PI);   // a little spread so the string is not a wire
                 coin.position = p;
+
+                // Measured off the coin's real world position on the frame it is first drawn, not off
+                // the curve's endpoints: what the invariant has to know is where the player's eye
+                // would find it.
+                if (index == 0 && !_firstCoinMeasured && _cam != null)
+                {
+                    _firstCoinMeasured = true;
+                    _firstCoinViewport = _cam.WorldToViewportPoint(p);
+                }
                 FaceCamera(coin, Sample01(index, 4) * 360f + (Time.time - start) * spin);
 
                 // Pop in fast. The shrink-out that used to run from t=0.88 to 1.00 is gone: it was
@@ -607,6 +647,8 @@ namespace Case4
             _launched = 0;
             _armed = false;
             _worstSpawnOffset = 0f;
+            _firstCoinMeasured = false;
+            _firstCoinViewport = Vector3.zero;
         }
 
         /// <summary>Sampled arc points, for drawing the flight path in the editor.</summary>

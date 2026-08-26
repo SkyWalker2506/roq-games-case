@@ -30,8 +30,20 @@ namespace Case4
         [Tooltip("Pre-launch idle duration matching reference video (t=0.00 to 0.65s).")]
         public float idleDelay = 0.68f;
         public float anticipationDuration = 0.0f;
-        [Tooltip("Hard cap on the flight. The flight really ends when the puck reaches the stack.")]
+        [Tooltip("How long the shot is given before its energy is bled off. NOT a verdict on whether " +
+                 "it hit - see the flight step. The reference bank arrives at 1.07-1.13 s, well inside it.")]
         public float flightTimeout = 2.40f;
+        [Tooltip("Speed at or below which the puck counts as stopped, in world units per second.")]
+        public float flightRestSpeed = 0.35f;
+        [Tooltip("How long the puck has to stay under flightRestSpeed before the shot is called a miss.")]
+        public float flightRestHold = 0.14f;
+        [Tooltip("Absolute ceiling on the flight step, so a puck that somehow never rests cannot hang " +
+                 "the sequence. A real shot reaches this only if the physics is broken.")]
+        public float flightCeiling = 9.0f;
+        [Tooltip("Restores the pre-fix behaviour: the flight ends on flightTimeout whether or not the " +
+                 "shot has resolved. Exists ONLY so Case4PayoutGate can prove its invariant goes red " +
+                 "against the tree this replaced. Never ship it true.")]
+        [HideInInspector] public bool legacyFixedFlightBudget;
         public float impactDuration = 0.07f;
         [Tooltip("Hard cap on the collapse. It really ends when the stack has come to rest.")]
         public float collapseTimeout = 1.85f;
@@ -403,8 +415,33 @@ namespace Case4
             // Real ricochets. End on the solver frame of the first stack collision, not one or more
             // frames later when a displacement threshold finally notices the pile moved.
             BeginStep("flight");
+            // THE FLIGHT ENDS WHEN THE SHOT RESOLVES, NOT WHEN A STOPWATCH SAYS SO.
+            //
+            // It used to be `while (elapsed < flightTimeout && !launcher.StackHit)`, and the sequence
+            // then treated the timeout as proof of a miss. It is not proof of anything except that the
+            // director stopped waiting. The owner's own console has the failure verbatim
+            // (2026-08-26 06:14:44, seq 281-304): a hand-aimed shot banked ten times, was still doing
+            // 25.45 u/s when the 2.40 s budget expired, and the sequence ran its whole impact and
+            // collapse beat with reached=false - COIN_BLOCKED, "coins launched = 0". One second later
+            // the puck arrived for real, COIN_ARMED fired from a genuine solver contact, the cascade
+            // ran and the pile came down in front of him. The end-of-run PROOF line for that same shot
+            // reads `stackHit=True` and `coin stream: 0 coins launched`. That IS the bug: the stack
+            // was hit, the payout was never launched, and every gate in the tree passed, because every
+            // one of them measures the reference bank, which arrives at 1.07-1.13 s and never spends
+            // its budget.
+            //
+            // The distinguishing quantity is time-to-stack, so the loop is written against the two
+            // things that actually end a shot:
+            //   * the puck reaches the stack, or
+            //   * the puck stops moving, which is the only honest definition of a miss.
+            // flightTimeout keeps its pacing job - after it the puck's energy is bled off so a miss
+            // still resolves in about the same beat it used to - but it is no longer a verdict, and
+            // the bleed-off deliberately keeps the contact path live (PuckLauncher.BleedOff, not
+            // Calm) so a puck that arrives during the bleed still registers a real hit.
             float flightStart = Time.time;
-            while (Time.time - flightStart < flightTimeout && !launcher.StackHit)
+            float stillSince = -1f;
+            string flightEnd = "ceiling";
+            while (!launcher.StackHit)
             {
                 float flightElapsed = Time.time - flightStart;
                 if (flightElapsed >= 0.30f && _targetCamera != null)
@@ -414,12 +451,41 @@ namespace Case4
                     Vector3 flightDrift = new Vector3(-0.047f * curve, 0f, -0.023f * curve);
                     _targetCamera.transform.localPosition = _cameraKickBase + flightDrift;
                 }
+
+                if (legacyFixedFlightBudget)
+                {
+                    if (flightElapsed >= flightTimeout) { flightEnd = "legacy-timeout"; break; }
+                    yield return null;
+                    continue;
+                }
+
+                if (flightElapsed >= flightTimeout) launcher.BleedOff();
+
+                if (launcher.Speed <= flightRestSpeed)
+                {
+                    if (stillSince < 0f) stillSince = Time.time;
+                    if (Time.time - stillSince >= flightRestHold) { flightEnd = "rest"; break; }
+                }
+                else stillSince = -1f;
+
+                if (flightElapsed >= flightCeiling) { flightEnd = "ceiling"; break; }
                 yield return null;
             }
+            if (launcher.StackHit) flightEnd = "stack";
             float flightTime = Time.time - flightStart;
             bool reached = launcher.StackHit;
             Debug.Log(string.Format("[Case4] FLIGHT {0:0.000}s rails hit={1} travelled={2:0.00} speed={3:0.00} reachedStack={4}",
                 flightTime, launcher.BounceCount, launcher.FlightDistance, launcher.Speed, reached));
+            // Printed separately from FLIGHT because they are different quantities and the old log
+            // conflated them: FLIGHT is how long the DIRECTOR waited, TimeToStack is when the puck
+            // actually arrived. On the failing shot those were 2.403 s and about 3.5 s, and no line
+            // in the log said so.
+            Debug.Log(string.Format(
+                "[Case4] FLIGHT_END reason={0} waited={1:0.000}s timeToStack={2} bledOff={3} " +
+                "(budget {4:0.00}s, rest<= {5:0.00}u/s for {6:0.00}s, ceiling {7:0.00}s)",
+                flightEnd, flightTime,
+                launcher.TimeToStack >= 0f ? launcher.TimeToStack.ToString("0.000") + "s" : "never",
+                launcher.Bleeding, flightTimeout, flightRestSpeed, flightRestHold, flightCeiling));
             EndStep();
 
             // ---------------------------------------------------------- 3. impact
@@ -589,6 +655,9 @@ namespace Case4
             Debug.Log(string.Format(
                 "[Case4] PROOF contactless payout: stackHit={0}, coins launched while un-armed = {1}",
                 launcher.StackHit, coins.Armed ? 0 : coins.LaunchedCount));
+            string payoutWhy;
+            bool payoutHeld = PayoutInvariantHolds(out payoutWhy);
+            Debug.Log("[Case4] PAYOUT_INVARIANT " + (payoutHeld ? "PASS " : "FAIL ") + payoutWhy);
             Debug.Log(string.Format(
                 "[Case4] PROOF arena rim: {0} flash CALLS, cyan active={1}, wired={2}" +
                 (wall != null && wall.IsWired ? "" : " -- NOTHING WAS DRAWN: the rim keeps its authored materials, so these are requests, not pixels"),
@@ -603,6 +672,47 @@ namespace Case4
             // The arena is now spent: puck parked wherever the shot left it, stack down. It is armed
             // again on the next press, not here - see ArmNextShot.
             _shotSpent = true;
+        }
+
+        /// <summary>
+        /// THE PRE-REGISTERED INVARIANT, written before the fix that made it hold:
+        ///
+        ///   Every shot that registers a real solver contact with the stack emits at least
+        ///   <see cref="PayoutCoinFloor"/> coins, and the first coin's first drawn frame is inside
+        ///   the viewport.
+        ///
+        /// Both halves are needed. LaunchedCount alone cannot tell "no payout" from "a payout the
+        /// player could not see", and those are the same complaint from the owner's chair. A shot
+        /// that never touched the stack is not covered: it is supposed to pay nothing, and the
+        /// contactless-payout proof above is what holds that end.
+        /// </summary>
+        public bool PayoutInvariantHolds(out string detail)
+        {
+            int floor = PayoutCoinFloor;
+            bool hit = launcher != null && launcher.StackHit;
+            int launched = coins != null ? coins.LaunchedCount : 0;
+            Vector3 vp = coins != null ? coins.FirstCoinViewport : Vector3.zero;
+            bool onScreen = coins != null && coins.FirstCoinOnScreen;
+
+            detail = string.Format(
+                "stackHit={0} timeToStack={1} coinsLaunched={2} (floor {3} of {4}) " +
+                "firstCoinViewport=({5:0.000},{6:0.000},{7:0.00}) firstCoinOnScreen={8}",
+                hit,
+                launcher != null && launcher.TimeToStack >= 0f ? launcher.TimeToStack.ToString("0.000") + "s" : "never",
+                launched, floor, coins != null ? coins.coinCount : 0,
+                vp.x, vp.y, vp.z, onScreen);
+
+            if (!hit) { detail += " -> not covered (no stack contact; the payout is supposed to be nothing)"; return true; }
+            if (launched < floor) { detail += " -> BROKEN: the stack was hit and the payout did not play"; return false; }
+            if (!onScreen) { detail += " -> BROKEN: coins were emitted where the player cannot see them"; return false; }
+            detail += " -> held";
+            return true;
+        }
+
+        /// <summary>Fewest coins a shot that hit the stack is allowed to emit: 90% of the authored stream.</summary>
+        public int PayoutCoinFloor
+        {
+            get { return coins == null ? 0 : Mathf.Max(1, Mathf.FloorToInt(coins.coinCount * 0.9f)); }
         }
 
         int _debrisSfxPlayed;
