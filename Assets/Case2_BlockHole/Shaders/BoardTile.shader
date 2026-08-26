@@ -103,8 +103,20 @@ Shader "Case2/BoardTile"
             float _GradZ;
             float _FaceLevel;
             float _ShadowStrength;
-                float  _ClipMinY;
             CBUFFER_END
+
+            // OUTSIDE the UnityPerMaterial CBUFFER, deliberately.
+            //
+            // That cbuffer is per-MATERIAL under the SRP Batcher, and a per-renderer
+            // MaterialPropertyBlock write to anything inside it is silently ignored. _ClipMinY was
+            // declared in there, so HoleGlowHighlight.SetTileClipped(i, false) did nothing at all: a
+            // rising tile stayed clipped and its climb was invisible - "kirpma gelince yukari asagi
+            // animasyon yok oluyor". No error, no warning; the value simply never arrived.
+            //
+            // Declared here it is a plain uniform, which a property block CAN set. The cost is that
+            // this shader drops out of the SRP Batcher, and for 56 board tiles that is cheap next to
+            // the alternative of the effect not working.
+            float _ClipMinY;
 
             struct Attributes
             {
