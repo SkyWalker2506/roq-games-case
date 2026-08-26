@@ -1204,13 +1204,6 @@ namespace Case3
                 float e = Ease.Evaluate(EaseType.OutCubic, k);
 
                 peel.SetProgress(e * peelEnd);
-                // Pin the stuck EDGE, not the transform and not the centre.
-                //
-                // Writing the transform let the paper slide: the curl's centroid compensation moves
-                // the drawn mesh away from its own transform as the roll grows - up to 3.23 world
-                // units on the cat - so the transform sat still and the sheet wandered off ("random
-                // bir yere giderek aciliyor"). Pinning the centre fixes that but buys the other
-                // complaint, rotation in place. Pinning the edge fixes both.
                 // THE OBJECT'S CENTRE DOES NOT MOVE. Not the drawn centre, not the curl's bounds,
                 // not the hinge - the sheet's own transform, which is what "the object's centre"
                 // means and what the card will later be asked to match.
@@ -1231,16 +1224,14 @@ namespace Case3
             }
 
             peel.SetProgress(peelEnd);
-            // The flight starts from exactly where the peel left the PAPER, which is now a known
-            // point rather than a measured one: the peel pinned it there every frame. Measuring it
-            // again would only reintroduce the risk of the two disagreeing by a frame.
-            // The flight starts from wherever holding the edge has left the paper - read it, do not
-            // assume it, because the centre has legitimately travelled during the roll.
+            // The peel held the sheet's transform still, so the pose at the end of it is known.
             Vector3 endLift = new Vector3(0f, peelLift, -0.05f);
             _stickerTf.position = homePosition + endLift;
-            // The flight carries the sheet's OWN centre, so the landing can put that centre on the
-            // card's centre and have it sit in the middle however far the curled part hangs.
-            Vector3 drawnLaunch = _stickerTf.position;
+            // The flight interpolates between two DRAWN positions - it ends with
+            // PlaceDrawnAt(peel, restCentre) - so its start has to be a drawn position too. Handing it
+            // the transform made the first flight frame snap by the curl offset, because frame 0
+            // placed the paper at a point that had been measured for the transform instead.
+            Vector3 drawnLaunch = peel.VisualWorldCentre(9);
 
             // PEEL COMPLETION IS THE PROMOTION INSTANT. In the reference the jar is uncovered at
             // t=4.11 and is a fully collectible sticker from that frame on - it is tapped and
@@ -1330,10 +1321,18 @@ namespace Case3
                 // approached 0.99 from above, so the beat had no contact in it.
                 float press = 1f - 0.045f * Mathf.Sin(k * Mathf.PI);
                 _stickerTf.localScale = Vector3.Lerp(flightEndScale, slotScale, Ease.Evaluate(EaseType.OutQuad, k)) * press;
-                // Same rule as the peel: the object's centre stays where the flight left it. Every
-                // variant that pinned something derived from the curl - drawn centre, AABB edge,
-                // hinge - moved, because all of them grow with the roll.
-                _stickerTf.position = restCentre;
+                // Pin the PAPER, exactly as the flight did. The flight ends with
+                // PlaceDrawnAt(peel, restCentre), i.e. the transform parked wherever it had to be for
+                // the DRAWN sheet to sit on the card. Writing the transform straight to restCentre
+                // here therefore moves the drawing by the whole curl offset in one frame - measured
+                // at 3.47 u on both cats, a 3.47 u teleport backwards at 'flip' followed by the sheet
+                // walking the same path a second time. That is the owner's "birden isinlanma gibi bir
+                // sey oluyor", and CHECK A/CHECK B fail on exactly that frame.
+                //
+                // The centre that must not move is the one you can see. Re-pinning it every frame
+                // holds it still while the roll unwinds around it, which is also what makes the
+                // unroll read as relaxing open rather than as arriving twice.
+                PlaceDrawnAt(peel, restCentre);
                 TraceMark("flip");
                 yield return null;
             }
