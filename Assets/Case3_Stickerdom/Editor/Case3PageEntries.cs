@@ -449,7 +449,7 @@ public static class Case3PageEntries
         // over the art rather than into an empty band and has to stay legible on top of it.
         tmp.outlineColor = Color.white;
         tmp.outlineWidth = 0.22f;
-        tmp.enableWordWrapping = false;
+        tmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
         tmp.raycastTarget = false;
         tmp.enabled = false;                     // nothing collected yet
 

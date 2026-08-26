@@ -193,8 +193,6 @@ namespace Case3
         bool _built;
         bool _meshMode;
 
-        SpriteRenderer _paperShadow;
-        bool _shadowResolved;
         bool _placed;
         Color _shadowHomeColor = Color.white;
 
@@ -241,24 +239,6 @@ namespace Case3
                 ApplyDirection(ResolveDirection());
                 SetProgress(_progress);
 
-                // The fold direction is derived from the tap and nothing else, so if a sheet peels the
-                // wrong way the disagreement has to be visible in these five numbers. Printed rather
-                // than guessed at: the owner reports PageObj_ramen_cup peels inward while its
-                // neighbours do not, and nothing in its transform is unusual - no mirrored scale, and
-                // a tilt (0.044 rad) that PageObj_teddy shares.
-                //
-                // What this can show that reasoning could not: whether NEAREST CORNER is the corner
-                // under the finger. The corners come from the sprite's mesh RECT, and art that does
-                // not fill its rect puts the geometric corner somewhere the player never sees - so a
-                // tap near the drawn cup can snap to the far corner and hinge on the wrong side.
-                Vector2 corner = NearestCornerLocal(_originLocal);
-                Debug.Log(string.Format(
-                    "[Case3Peel] PEEL_DIR {0}: tap_local ({1:0.00}, {2:0.00}) rect ({3:0.00},{4:0.00})..({5:0.00},{6:0.00}) " +
-                    "corner ({7:0.00}, {8:0.00}) dir ({9:0.00}, {10:0.00}) pivot_local ({11:0.00}, {12:0.00})",
-                    sticker != null ? sticker.name : name,
-                    _originLocal.x, _originLocal.y,
-                    _localMin.x, _localMin.y, _localMax.x, _localMax.y,
-                    corner.x, corner.y, _dir.x, _dir.y, _pivotLocal.x, _pivotLocal.y));
             }
         }
 
@@ -337,6 +317,9 @@ namespace Case3
                  "1 = fully curled from the pivot corner. Editor-only; the sequence overwrites it at runtime.")]
         [Range(0f, 1f)] public float manualPeel;
 
+        /// <summary>Prints one build line per sheet. Off: fourteen sheets is fourteen lines of noise.</summary>
+        [System.NonSerialized] public bool verboseBuildLog = false;
+
         /// <summary>
         /// Applies <see cref="manualPeel"/> the moment it is dragged in the Inspector, so the curl can
         /// be dialled in by eye without entering Play mode. Does nothing while the game is running -
@@ -346,10 +329,22 @@ namespace Case3
         {
             if (Application.isPlaying) return;
             if (sticker == null || sticker.sprite == null) return;
-            Prepare();
-            if (!_built) return;
-            SetMeshMode(manualPeel > 0.0001f);
-            SetProgress(manualPeel);
+
+            // Everything Prepare does - new GameObject, SetParent, AddComponent - is forbidden inside
+            // OnValidate, and Unity says so six times per sheet per Inspector touch. Deferring to the
+            // next editor tick does the same work where it is legal, and the slider still updates in
+            // the same frame the drag ends.
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.delayCall += () =>
+            {
+                if (this == null || Application.isPlaying) return;
+                if (sticker == null || sticker.sprite == null) return;
+                Prepare();
+                if (!_built) return;
+                SetMeshMode(manualPeel > 0.0001f);
+                SetProgress(manualPeel);
+            };
+#endif
         }
 
         Vector2 ResolveDirection()
@@ -486,11 +481,14 @@ namespace Case3
             _mpb = new MaterialPropertyBlock();
             _built = true;
 
-            Debug.Log(string.Format(
-                "[Case3Peel] mesh built for {0}: {1}x{1} grid ({2} verts), local size {3:0.00}x{4:0.00}, " +
-                "curl radius {5:0.000} (dir {6}), fold sweep {7:0.00} -> {8:0.00}",
-                sticker.name, segments, (segments + 1) * (segments + 1), size.x, size.y,
-                _radius, _dir, _projMax + _lead, _projMin - _trail));
+            // Verbose per-sheet build log, off by default: fourteen of these open every session and
+            // they buried the lines that matter. Set verboseBuildLog to get them back.
+            if (verboseBuildLog)
+                Debug.Log(string.Format(
+                    "[Case3Peel] mesh built for {0}: {1}x{1} grid ({2} verts), local size {3:0.00}x{4:0.00}, " +
+                    "curl radius {5:0.000} (dir {6}), fold sweep {7:0.00} -> {8:0.00}",
+                    sticker.name, segments, (segments + 1) * (segments + 1), size.x, size.y,
+                    _radius, _dir, _projMax + _lead, _projMin - _trail));
 
             SetProgress(0f);
         }
@@ -707,8 +705,6 @@ namespace Case3
                 };
 #endif
             }
-            _paperShadow = null;
-            _shadowResolved = true;
         }
 
         /// <summary>True once <see cref="DestroyPaperShadows"/> has swept this sheet.</summary>

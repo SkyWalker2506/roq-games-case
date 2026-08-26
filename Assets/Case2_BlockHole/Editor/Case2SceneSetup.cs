@@ -25,7 +25,11 @@ public static class Case2SceneSetup
     const string DustPath = "Assets/Case2_BlockHole/VFX/DustPuff.prefab";
     const string RootName = "Case2_Sequence";
     const BlockShapeId HeroShape = BlockShapeId.Cross;
-    const bool SceneIsAuthored = true;
+    // static readonly, not const. Identical behaviour, but a const lets the compiler PROVE every
+    // `if (!SceneIsAuthored)` body is dead, and it emitted 16 "unreachable code" warnings saying so.
+    // Those bodies are deliberately parked - the scene owns that placement now - and burying 16
+    // warnings in the console to say it is worse than the one comment that already explains it.
+    static readonly bool SceneIsAuthored = true;
 
     /// <summary>Menu entry point.</summary>
     public static void BuildMenu()

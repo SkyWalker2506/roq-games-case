@@ -49,7 +49,11 @@ public static class Case4SceneSetup
     /// measured derivation of why the authored arena has the proportions it has, which is the
     /// evidence trail for this case, not as something anyone should run.
     /// </summary>
-    const bool SceneIsAuthored = true;
+    // static readonly, not const. Identical behaviour, but a const lets the compiler PROVE every
+    // `if (!SceneIsAuthored)` body is dead, and it emitted 16 "unreachable code" warnings saying so.
+    // Those bodies are deliberately parked - the scene owns that placement now - and burying 16
+    // warnings in the console to say it is worse than the one comment that already explains it.
+    static readonly bool SceneIsAuthored = true;
 
     /// <summary>Stack silhouette: tallest column against the left rail, stepping down to the right.</summary>
     // The reference staircase, counted off _refs/Developer Case Referans/Buca.mp4 at t=0.14 s

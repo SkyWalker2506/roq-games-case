@@ -165,8 +165,18 @@ namespace Case3
         [System.NonSerialized] public float peelEnd = 0.75f;
         [Tooltip("How far the sticker lifts off the strip while it peels, in world units.")]
         public float peelLift = 0.34f;
-        [Tooltip("Scale at the far end of the flight, as a fraction of the landing scale. Reference: 1.0 -> 0.6.")]
-        public float flightShrink = 0.88f;
+        /// <summary>
+        /// Scale during the flight, as a fraction of the landed scale.
+        ///
+        /// 1.0: the sticker is ONE SIZE from the page to the card. At 0.88 it flew twelve per cent
+        /// small for the whole crossing and then returned to full as it bedded down, which the owner
+        /// reads exactly as it looks - "sahnede kucuk, yerine yerlesince biraz buyuyor gibi, ayni
+        /// olsun". A sustained size difference that resolves at the end is not an arc; it is a size
+        /// change with a slow fuse.
+        ///
+        /// NonSerialized: the scene carries flightShrink: 0.88 and would outrank this.
+        /// </summary>
+        [System.NonSerialized] public float flightShrink = 1f;
         [Tooltip("Peak of the landing overshoot, as a fraction: 0.05 means the sticker splats 5% wide before settling.")]
         public float popStretch = 0.050f;
 
@@ -175,7 +185,14 @@ namespace Case3
                  "end of the settle, and states whether the landing was one move or several. Left on: " +
                  "it costs one 9x9 curl sample per frame for about half a second per run, and it is the " +
                  "only thing that can tell a smooth landing from a corrected one without a video.")]
-        public bool traceLanding = true;
+        /// <summary>
+        /// Prints the frame-by-frame landing trace and its two checks.
+        ///
+        /// OFF. It is several hundred lines per run and it has done its job: the teleport at the phase
+        /// boundary, the drift at full peel and the second landing were all found with it, and all
+        /// three now read GREEN. Turn it on to re-measure, not to play.
+        /// </summary>
+        [System.NonSerialized] public bool traceLanding = false;
 
         [Tooltip("THE INVARIANT. Once the flight has begun, the drawn sheet must only ever get CLOSER " +
                  "to where it finally comes to rest. A frame that increases that remaining distance is " +

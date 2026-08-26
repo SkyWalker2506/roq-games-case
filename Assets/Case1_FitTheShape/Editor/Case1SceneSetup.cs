@@ -49,7 +49,11 @@ public static class Case1SceneSetup
     /// So the builder no longer places, scales, rotates or regroups anything that already exists. It
     /// owns LOGIC: shape identity, colour, prefab variants, recesses, question-mark covers, the rail,
     /// and the wiring between them.
-    const bool SceneIsAuthored = true;
+    // static readonly, not const. Identical behaviour, but a const lets the compiler PROVE every
+    // `if (!SceneIsAuthored)` body is dead, and it emitted 16 "unreachable code" warnings saying so.
+    // Those bodies are deliberately parked - the scene owns that placement now - and burying 16
+    // warnings in the console to say it is worse than the one comment that already explains it.
+    static readonly bool SceneIsAuthored = true;
 
     /// <summary>Batchmode entry point: wires the scene and saves it.</summary>
     public static void Build()

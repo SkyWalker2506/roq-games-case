@@ -76,7 +76,6 @@ namespace Case2
 
         float _t0;              // scaled sequence clock; deterministic under Time.captureFramerate
         float _dropTime;
-        float _decoyPeakGlow;
         int _startFrame;
         bool _userTailRunning;
         int _delivered;
@@ -215,7 +214,6 @@ namespace Case2
 
             // ---------------------------------------------------------- 2. drag directly to the valid hole
             BeginStep("drag");
-            _decoyPeakGlow = 0f;
             // Linear, not OutCubic. OutCubic put 99% of the travel in the first 60% of the drag and
             // left the block pixel-identical for the last 0.39 s - 16% of a 2.41 s clip with nothing
             // moving in it. Fitted against the reference's own cross: its centroid runs
